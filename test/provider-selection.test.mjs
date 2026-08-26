@@ -10,6 +10,11 @@ process.env.CODEX_ROUTER_STATE_DIR = path.join(testRoot, "state");
 process.env.KIMI_CODE_HOME = path.join(testRoot, "kimi-code");
 process.env.GROK_AUTH_PATH = path.join(testRoot, "grok", "auth.json");
 process.env.DEVIN_CREDENTIALS_PATH = path.join(testRoot, "devin", "credentials.toml");
+// The Command Code CLI OAuth session resolves against the real home, which a
+// developer machine that signed in would otherwise leak in and mark the OAuth
+// provider configured. Point it at the empty test root so "no provider is
+// configured yet" stays deterministic.
+process.env.COMMANDCODE_AUTH_HOME = path.join(testRoot, "commandcode");
 const { PROVIDERS } = await import("../src/model-registry.mjs");
 // Clearing every registry-declared credential variable keeps the "no provider
 // is configured yet" assertions deterministic on a developer machine that has
@@ -179,10 +184,10 @@ test("OpenCode Free protocol variants follow the anonymous parent as one family"
 test("Command Code protocol variants follow their parent as one family", () => {
   try {
     // Command Code OAuth authenticates via the CLI's own auth file, which the
-    // router reads under CODEX_HOME. Stage one so the family resolves without
-    // any real credential on the machine, then drop it so the API-key sibling
-    // is not affected by this test.
-    const authRoot = path.join(testRoot, "codex", ".commandcode");
+    // router reads under COMMANDCODE_AUTH_HOME. Stage one so the family
+    // resolves without any real credential on the machine, then drop it so the
+    // API-key sibling is not affected by this test.
+    const authRoot = path.join(process.env.COMMANDCODE_AUTH_HOME, ".commandcode");
     mkdirSync(authRoot, { recursive: true });
     writeFileSync(
       path.join(authRoot, "auth.json"),
