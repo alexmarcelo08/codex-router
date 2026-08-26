@@ -50,6 +50,38 @@ test("provider registry exposes configured API and OAuth model families", () => 
       "clinepass/qwen3.7-max",
       "clinepass/qwen3.7-plus",
       "clinepass/qwen3.8-max",
+      "commandcode-api/deepseek-v4-flash",
+      "commandcode-api/deepseek-v4-pro",
+      "commandcode-api/fugu-ultra",
+      "commandcode-api/gemini-3.5-flash",
+      "commandcode-api/gemini-3.7-flash",
+      "commandcode-api/GLM-5.2-Fast",
+      "commandcode-api/GLM-5.2",
+      "commandcode-api/gpt-5.5",
+      "commandcode-api/gpt-5.6-luna",
+      "commandcode-api/gpt-5.6-sol",
+      "commandcode-api/gpt-5.6-terra",
+      "commandcode-api/grok-4.5",
+      "commandcode-api/grok-4.6",
+      "commandcode-api/hy3-paid",
+      "commandcode-api/inkling-small",
+      "commandcode-api/inkling",
+      "commandcode-api/Kimi-K2.7-Code-Highspeed",
+      "commandcode-api/Kimi-K2.7-Code",
+      "commandcode-api/Kimi-K3",
+      "commandcode-api/laguna-s-2.1-free",
+      "commandcode-api/mimo-v2.5-pro",
+      "commandcode-api/MiniMax-M2.7",
+      "commandcode-api/MiniMax-M3",
+      "commandcode-api/muse-spark-1.2",
+      "commandcode-api/nemotron-3-ultra-550b-a55b",
+      "commandcode-api/Qwen3.7-Flash",
+      "commandcode-api/Qwen3.7-Max",
+      "commandcode-api/Qwen3.7-Plus",
+      "commandcode-api/Qwen3.8-Max",
+      "commandcode-api/Step-3.7-Flash",
+      "commandcode-api/ox-alpha",
+      "commandcode-api/deepseek-v4-flash-vision-exp",
       "commandcode/deepseek-v4-flash",
       "commandcode/deepseek-v4-pro",
       "commandcode/fugu-ultra",
@@ -213,19 +245,22 @@ test("provider registry exposes configured API and OAuth model families", () => 
   assert.equal(PROVIDERS.get("opencode-zen").variantOf, "opencode-go");
   assert.equal(PROVIDERS.has("opencode-zen-responses"), false);
   assert.equal(PROVIDERS.get("commandcode").variantOf, undefined);
+  assert.equal(PROVIDERS.get("commandcode-api").variantOf, undefined);
   assert.equal(PROVIDERS.get("commandcode-messages").variantOf, "commandcode");
   assert.equal(
     PROVIDERS.get("opencode-go-messages").credential.file,
     PROVIDERS.get("opencode-go").credential.file,
   );
-  assert.equal(
-    PROVIDERS.get("commandcode-messages").credential.file,
-    PROVIDERS.get("commandcode").credential.file,
-  );
-  assert.deepEqual(PROVIDERS.get("commandcode").credential.environment, [
+  // Command Code now splits the two routes: the CLI OAuth session (no
+  // router-managed file or env var) and the documented API key, which are
+  // separate selectable providers rather than one family.
+  assert.equal(PROVIDERS.get("commandcode").credential.cliSession, true);
+  assert.equal(PROVIDERS.get("commandcode-messages").credential.cliSession, true);
+  assert.deepEqual(PROVIDERS.get("commandcode-api").credential.environment, [
     "COMMAND_CODE_API_KEY",
     "COMMANDCODE_API_KEY",
   ]);
+  assert.equal(PROVIDERS.get("commandcode-api").credential.file, "commandcode-api-key.secret");
   assert.equal(PROVIDERS.get("grok-api").baseUrl, "https://api.x.ai/v1");
   assert.equal(PROVIDERS.get("local").transport, "ollama");
   assert.equal(PROVIDERS.get("lmstudio").baseUrl, "http://127.0.0.1:1234/v1");

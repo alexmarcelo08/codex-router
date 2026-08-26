@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import http from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -79,9 +79,18 @@ async function waitForHealth(base, headers, child, errors) {
   throw new Error(`forwarder never became healthy: ${errors()}`);
 }
 
-test("a plan-refused Command Code account is served through the CLI route", async () => {
+test("an OAuth Command Code turn is routed straight to the CLI route", async () => {
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "commandcode-forwarder-state-"));
   const cliHome = mkdtempSync(path.join(os.tmpdir(), "commandcode-forwarder-home-"));
+  // Stage the CLI OAuth auth file under the virtual CODEX_HOME so the provider
+  // resolves as configured without touching the real home.
+  const authDir = path.join(cliHome, ".commandcode");
+  mkdirSync(authDir, { recursive: true });
+  writeFileSync(
+    path.join(authDir, "auth.json"),
+    JSON.stringify({ apiKey: "oauth_session_key_test" }),
+    { encoding: "utf8", mode: 0o600 },
+  );
   const upstreamPort = await openPort();
   const forwarderPort = await openPort();
   const { server, calls } = mockCommandCode();
@@ -97,7 +106,7 @@ test("a plan-refused Command Code account is served through the CLI route", asyn
       MODEL_ROUTER_STATE_DIR: stateDir,
       MODEL_ROUTER_QUIET: "1",
       COMMANDCODE_BASE_URL: `http://127.0.0.1:${upstreamPort}/provider/v1`,
-      COMMAND_CODE_API_KEY: "user_test_key",
+      CODEX_HOME: cliHome,
       COMMANDCODE_CLI_HOME: cliHome,
     },
     stdio: ["ignore", "ignore", "pipe"],
@@ -129,7 +138,10 @@ test("a plan-refused Command Code account is served through the CLI route", asyn
     const firstBody = await first.text();
     assert.match(firstBody, /"content":"OK"/);
     assert.ok(firstBody.endsWith("data: [DONE]\n\n"));
-    assert.equal(calls.providerApi, 1);
+    // The OAuth provider rides the CLI's own route on every turn; it never
+    // probes the documented API to learn the plan, so the first turn already
+    // answers from /alpha/generate.
+    assert.equal(calls.providerApi, 0, "the OAuth route must never ask the documented API");
     assert.equal(calls.generate, 1);
     // The envelope that left carries the upstream model id and the schema-strict
     // config the route validates.
@@ -137,22 +149,17 @@ test("a plan-refused Command Code account is served through the CLI route", asyn
     assert.equal(calls.generateBodies[0].memory, "");
     assert.equal(calls.generateBodies[0].config.environment, "production");
 
-    // The refusal was written down, so the second turn never buys it again.
-    const planPath = path.join(stateDir, "commandcode-plan.json");
-    assert.ok(existsSync(planPath));
-    assert.equal(JSON.parse(readFileSync(planPath, "utf8")).commandcode.providerApi, false);
-
     const second = await turn();
     assert.equal(second.status, 200);
     assert.match(await second.text(), /"content":"OK"/);
-    assert.equal(calls.providerApi, 1, "the documented API must not be asked twice");
+    assert.equal(calls.providerApi, 0, "the OAuth route must never ask the documented API");
     assert.equal(calls.generate, 2);
 
     // The plan route meters the same subscription, so its quota headers are
     // harvested the same way a forwarded provider's are.
-    const limits = JSON.parse(readFileSync(path.join(stateDir, "rate-limits.json"), "utf8"));
-    assert.equal(limits.commandcode.requests.remaining, 97);
-    assert.equal(limits.commandcode.requests.limit, 100);
+    // The OAuth route never touches the documented API or writes plan state,
+    // but it still harvests the CLI route's quota headers.
+    assert.equal(existsSync(path.join(stateDir, "commandcode-plan.json")), false);
   } finally {
     if (child.exitCode === null) {
       child.kill("SIGTERM");
@@ -209,7 +216,7 @@ test("a 403 that is not the plan refusal is relayed, not routed around", async (
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: "commandcode-deepseek-v4-flash",
+        model: "commandcode-api-deepseek-v4-flash",
         messages: [{ role: "user", content: "hi" }],
       }),
     });

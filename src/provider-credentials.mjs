@@ -16,6 +16,7 @@ import { protectPrivateFile } from "./file-security.mjs";
 import { LEGACY_STATE_DIRS, STATE_DIR, TARGET } from "./paths.mjs";
 import { targetCli } from "./target-integration.mjs";
 import { PROVIDERS } from "./model-registry.mjs";
+import { commandCodeOAuthCredential } from "./commandcode-oauth.mjs";
 import {
   assertGitHubCopilotCredential,
   githubCopilotCredentialProblem,
@@ -41,9 +42,10 @@ export function primaryCredentialPath(provider) {
 }
 
 export function credentialPaths(provider) {
-  // A keyless provider stores nothing, so there is no file to look for and
-  // nothing for a support bundle to redact.
-  if (!provider.credential) return [];
+  // A keyless provider stores nothing, and a CLI-session provider keeps its
+  // secret in the provider's own auth file (not a router-managed file here),
+  // so there is no router file to look for and nothing to redact.
+  if (!provider.credential || !provider.credential.file) return [];
   const names = [provider.credential.file, ...(provider.credential.legacyFiles || [])];
   const candidates = names.flatMap((name) => [
     path.join(STATE_DIR, name),
@@ -142,6 +144,17 @@ export function resolveProviderCredential(providerOrId, options = {}) {
   if (!provider || provider.kind !== "openai-compatible") {
     throw new Error(`Unknown API-key provider: ${typeof providerOrId === "string" ? providerOrId : "unknown"}`);
   }
+  // A Command Code OAuth provider authenticates with the API key the official
+  // CLI stored after its browser sign-in. That session is not a credential the
+  // operator pastes here, so resolve it from the CLI's own protected auth file
+  // on the same code path as every other credential source.
+  if (provider.credential?.cliSession === true) {
+    if (discoveryDisabled()) return undefined;
+    const credential = commandCodeOAuthCredential();
+    return credential
+      ? { value: credential.value, source: credential.source, persistent: true }
+      : undefined;
+  }
   // Anonymous providers deliberately carry no secret. Returning a persistent
   // marker makes them participate in the same configured/selected/catalog
   // flow as local Ollama without ever creating a credential file or header.
@@ -202,6 +215,9 @@ export function credentialSetupHint(provider) {
   if (provider.authMode === "anonymous") return "No key needed; free models are rate limited by the provider.";
   if (provider.authMode === "per-model") return "No key needed here; each model names its own endpoint.";
   if (provider.keyless) return "No key needed; it runs on this machine.";
+  if (provider.credential?.cliSession === true) {
+    return "Sign in with the Command Code CLI (`command-code login`) to create the OAuth session.";
+  }
   const keyCommand = targetCli(`provider-key ${provider.id} set`);
   return `Run ${keyCommand}`;
 }
@@ -227,6 +243,12 @@ export function credentialStatus(providerOrId, options = {}) {
 export function writeProviderCredential(providerOrId, value) {
   const provider =
     typeof providerOrId === "string" ? apiProvider(providerOrId) : providerOrId;
+  if (provider.credential?.cliSession === true) {
+    throw new Error(
+      `${provider.id} uses a Command Code CLI OAuth session, not an API key. ` +
+        "Sign in with the Command Code CLI to create or refresh it.",
+    );
+  }
   const key = String(value || "").trim();
   if (!key) throw new Error(`No ${credentialLabel(provider)} was entered; nothing changed.`);
   if (provider.authProfile === "github-copilot") {

@@ -139,12 +139,21 @@ test("codex probe folds protocol variants into one provider family", () => {
 
 test("codex probe folds Command Code protocol variants into one provider family", () => {
   const slice = probe("codex", ["commandcode"]);
+  // The OAuth provider's Messages variant shares its parent's credential and
+  // selection, so it folds into the same row as the parent. The API-key
+  // sibling stays its own provider (it is a different account surface), so
+  // asserting "no commandcode- prefix" here would wrongly fold it too.
   const family = slice.models.filter((m) => m.provider === "commandcode");
   assert.ok(family.length > 0 && family.every((m) => m.enabled));
-  assert.ok(!slice.models.some((m) => m.provider.startsWith("commandcode-")));
+  // Only the variant suffix leaks as its own id; the split API provider is a
+  // separate account and must keep its own id.
+  assert.ok(!slice.models.some((m) => m.provider === "commandcode-messages"));
+  const apiFamily = slice.models.filter((m) => m.provider === "commandcode-api");
+  assert.ok(apiFamily.length > 0 && apiFamily.every((m) => !m.enabled));
   const providerIds = slice.providers.map((p) => p.id);
   assert.ok(providerIds.includes("commandcode"));
-  assert.ok(!providerIds.some((id) => id.startsWith("commandcode-")));
+  assert.ok(!providerIds.includes("commandcode-messages"));
+  assert.ok(providerIds.includes("commandcode-api"));
 });
 
 test("codex probe exposes only privacy-safe recent usage events", () => {

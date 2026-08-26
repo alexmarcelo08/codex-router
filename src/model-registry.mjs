@@ -299,6 +299,7 @@ function loadRegistry() {
       if (
         !provider.keyless &&
         !["anonymous", "per-model"].includes(provider.authMode) &&
+        provider.credential?.cliSession !== true &&
         (!provider.credential?.file || !Array.isArray(provider.credential.environment))
       ) {
         fail(`provider ${provider.id} requires credential metadata`);
@@ -309,8 +310,18 @@ function loadRegistry() {
       ) {
         fail(`provider ${provider.id} has an invalid credential label`);
       }
-      if (provider.credential?.cliSession !== undefined) {
-        fail(`provider ${provider.id} does not support CLI sessions; use an API key`);
+      // A Command Code OAuth provider authenticates with the token the
+      // official CLI already stored after its browser sign-in. That is a
+      // session, not an operator-supplied API key, and only the Command Code
+      // family may use it.
+      if (
+        provider.credential?.cliSession !== undefined &&
+        typeof provider.credential.cliSession !== "boolean"
+      ) {
+        fail(`provider ${provider.id} has an invalid cliSession flag`);
+      }
+      if (provider.credential?.cliSession === true && provider.commandCodeOAuth !== true) {
+        fail(`provider ${provider.id} uses a CLI session but is not a Command Code OAuth provider`);
       }
       // Some providers authenticate a credential their plan may still not
       // entitle to the API. The note says so everywhere a user connects, so

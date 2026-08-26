@@ -163,7 +163,17 @@ test("OpenCode Free protocol variants follow the anonymous parent as one family"
 
 test("Command Code protocol variants follow their parent as one family", () => {
   try {
-    writeProviderCredential("commandcode", "TEST_COMMANDCODE_SELECTION_KEY");
+    // Command Code OAuth authenticates via the CLI's own auth file, which the
+    // router reads under CODEX_HOME. Stage one so the family resolves without
+    // any real credential on the machine, then drop it so the API-key sibling
+    // is not affected by this test.
+    const authRoot = path.join(testRoot, "codex", ".commandcode");
+    mkdirSync(authRoot, { recursive: true });
+    writeFileSync(
+      path.join(authRoot, "auth.json"),
+      JSON.stringify({ apiKey: "TEST_COMMANDCODE_OAUTH_KEY" }),
+      { encoding: "utf8", mode: 0o600 },
+    );
 
     writeProviderSelection(["commandcode-messages"]);
     assert.deepEqual(

@@ -3,12 +3,26 @@
   "providers": [
     {
       "id": "commandcode",
-      "displayName": "Command Code",
+      "displayName": "Command Code OAuth",
       "kind": "openai-compatible",
       "ownedBy": "commandcode",
       "baseUrl": "https://api.commandcode.ai/provider/v1",
       "baseUrlEnv": "COMMANDCODE_BASE_URL",
-      "planNote": "Every Command Code plan except Go includes Provider API access; GOAT, Pro, Max, Team, and Provider accounts use this API and meter against their own credits.",
+      "commandCodeOAuth": true,
+      "planNote": "Uses the Command Code CLI OAuth session (browser sign-in) and routes through /alpha/generate. Works on any plan the official CLI itself can run, including Go.",
+      "credential": {
+        "cliSession": true,
+        "label": "Command Code CLI OAuth session"
+      }
+    },
+    {
+      "id": "commandcode-api",
+      "displayName": "Command Code API",
+      "kind": "openai-compatible",
+      "ownedBy": "commandcode",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "baseUrlEnv": "COMMANDCODE_BASE_URL",
+      "planNote": "Uses a plain Command Code API key against /provider/v1. Requires a plan with Provider API access (GOAT/Pro/Max/Team/Provider); Go plans are refused.",
       "credential": {
         "environment": [
           "COMMAND_CODE_API_KEY",
@@ -24,24 +38,17 @@
     },
     {
       "id": "commandcode-messages",
-      "displayName": "Command Code Messages",
+      "displayName": "Command Code Messages (OAuth)",
       "kind": "openai-compatible",
       "ownedBy": "commandcode",
       "variantOf": "commandcode",
       "protocol": "anthropic",
       "baseUrl": "https://api.commandcode.ai/provider/v1",
       "baseUrlEnv": "COMMANDCODE_BASE_URL",
+      "commandCodeOAuth": true,
       "credential": {
-        "environment": [
-          "COMMAND_CODE_API_KEY",
-          "COMMANDCODE_API_KEY"
-        ],
-        "file": "commandcode-api-key.secret",
-        "legacyFiles": [],
-        "keychainServices": [
-          "codex-router-commandcode"
-        ],
-        "prompt": "Command Code API key"
+        "cliSession": true,
+        "label": "Command Code CLI OAuth session"
       }
     }
   ]

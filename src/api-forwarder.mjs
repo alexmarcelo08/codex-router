@@ -1013,12 +1013,18 @@ async function handleRequest(request, response) {
   // its customers buy. The CLI's own route serves those plans, so an account
   // already known to be refused goes straight there rather than paying a 403
   // for the privilege of finding out again.
-  const commandCode = isCommandCodeProvider(normalized.provider)
-    ? (() => {
-        const id = canonicalProviderId(normalized.provider.id);
-        return { id, ...commandCodeRoute(id, credential.value) };
-      })()
-    : undefined;
+  const commandCode = (() => {
+    if (!isCommandCodeProvider(normalized.provider)) return undefined;
+    // The OAuth-session provider rides the CLI's own route, never the paid
+    // Provider API: that is exactly what the browser sign-in entitles it to,
+    // even on a Go plan. The API-key sibling stays on the documented endpoint
+    // and must not fall back, so a key whose plan lacks API access sees the
+    // gateway's real 403 instead of silently spending coding-plan credits.
+    if (normalized.provider.credential?.cliSession === true) {
+      return { id: canonicalProviderId(normalized.provider.id), route: "plan", recheck: false };
+    }
+    return undefined;
+  })();
   const relayThroughPlan = async () => {
     const outcome = await relayCommandCodeGenerate({
       payload: normalized.payload,

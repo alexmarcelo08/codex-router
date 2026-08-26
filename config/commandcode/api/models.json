@@ -1,0 +1,863 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "commandcode-api/deepseek-v4-flash",
+      "gatewayModel": "commandcode-api-deepseek-v4-flash",
+      "upstreamModel": "deepseek/deepseek-v4-flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "DeepSeek V4 Flash (Command Code API)",
+      "description": "DeepSeek V4 Flash through the Command Code Provider API.",
+      "priority": 100,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-deepseek-v4-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/deepseek-v4-pro",
+      "gatewayModel": "commandcode-api-deepseek-v4-pro",
+      "upstreamModel": "deepseek/deepseek-v4-pro",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "DeepSeek V4 Pro (Command Code API)",
+      "description": "DeepSeek V4 Pro through the Command Code Provider API.",
+      "priority": 101,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-deepseek-v4-pro-v1"
+    },
+    {
+      "slug": "commandcode-api/fugu-ultra",
+      "gatewayModel": "commandcode-api-fugu-ultra",
+      "upstreamModel": "sakana/fugu-ultra",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Fugu Ultra (Command Code API)",
+      "description": "Fugu Ultra through the Command Code Provider API.",
+      "priority": 126,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-fugu-ultra-v1"
+    },
+    {
+      "slug": "commandcode-api/gemini-3.5-flash",
+      "gatewayModel": "commandcode-api-gemini-3-5-flash",
+      "upstreamModel": "google/gemini-3.5-flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Gemini 3.5 Flash (Command Code API)",
+      "description": "Gemini 3.5 Flash through the Command Code Provider API.",
+      "priority": 121,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gemini-3-5-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/gemini-3.7-flash",
+      "gatewayModel": "commandcode-api-gemini-3-7-flash",
+      "upstreamModel": "google/gemini-3.7-flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Gemini 3.7 Flash (Command Code API)",
+      "description": "Gemini 3.7 Flash through the Command Code Provider API.",
+      "priority": 120,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1048576,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gemini-3-7-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/GLM-5.2-Fast",
+      "gatewayModel": "commandcode-api-glm-5-2-fast",
+      "upstreamModel": "zai-org/GLM-5.2-Fast",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GLM-5.2 Fast (Command Code API)",
+      "description": "GLM-5.2 Fast through the Command Code Provider API.",
+      "priority": 103,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-glm-5-2-fast-v1"
+    },
+    {
+      "slug": "commandcode-api/GLM-5.2",
+      "gatewayModel": "commandcode-api-glm-5-2",
+      "upstreamModel": "zai-org/GLM-5.2",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GLM-5.2 (Command Code API)",
+      "description": "GLM-5.2 through the Command Code Provider API.",
+      "priority": 102,
+      "defaultEffort": "max",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-glm-5-2-v1"
+    },
+    {
+      "slug": "commandcode-api/gpt-5.5",
+      "gatewayModel": "commandcode-api-gpt-5-5",
+      "upstreamModel": "gpt-5.5",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GPT 5.5 (Command Code API)",
+      "description": "GPT 5.5 through the Command Code Provider API.",
+      "priority": 119,
+      "defaultEffort": "medium",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 200000,
+      "autoCompact": 180000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gpt-5-5-v1"
+    },
+    {
+      "slug": "commandcode-api/gpt-5.6-luna",
+      "gatewayModel": "commandcode-api-gpt-5-6-luna",
+      "upstreamModel": "gpt-5.6-luna",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GPT 5.6 Luna (Command Code API)",
+      "description": "GPT 5.6 Luna through the Command Code Provider API.",
+      "priority": 118,
+      "defaultEffort": "medium",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1050000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gpt-5-6-luna-v1"
+    },
+    {
+      "slug": "commandcode-api/gpt-5.6-sol",
+      "gatewayModel": "commandcode-api-gpt-5-6-sol",
+      "upstreamModel": "gpt-5.6-sol",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GPT 5.6 Sol (Command Code API)",
+      "description": "GPT 5.6 Sol through the Command Code Provider API.",
+      "priority": 117,
+      "defaultEffort": "medium",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1050000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gpt-5-6-sol-v1"
+    },
+    {
+      "slug": "commandcode-api/gpt-5.6-terra",
+      "gatewayModel": "commandcode-api-gpt-5-6-terra",
+      "upstreamModel": "gpt-5.6-terra",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GPT 5.6 Terra (Command Code API)",
+      "description": "GPT 5.6 Terra through the Command Code Provider API.",
+      "priority": 116,
+      "defaultEffort": "medium",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1050000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-gpt-5-6-terra-v1"
+    },
+    {
+      "slug": "commandcode-api/grok-4.5",
+      "gatewayModel": "commandcode-api-grok-4-5",
+      "upstreamModel": "xai/grok-4.5",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Grok 4.5 (Command Code API)",
+      "description": "Grok 4.5 through the Command Code Provider API.",
+      "priority": 115,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 500000,
+      "autoCompact": 440000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-grok-4-5-v1"
+    },
+    {
+      "slug": "commandcode-api/grok-4.6",
+      "gatewayModel": "commandcode-api-grok-4-6",
+      "upstreamModel": "xai/grok-4.6",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Grok 4.6 (Command Code API)",
+      "description": "Grok 4.6 through the Command Code Provider API.",
+      "priority": 114,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 500000,
+      "autoCompact": 440000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-grok-4-6-v1"
+    },
+    {
+      "slug": "commandcode-api/hy3-paid",
+      "gatewayModel": "commandcode-api-hy3-paid",
+      "upstreamModel": "tencent/hy3-paid",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Hy3 (Command Code API)",
+      "description": "Hy3 through the Command Code Provider API.",
+      "priority": 122,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 262144,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-hy3-paid-v1"
+    },
+    {
+      "slug": "commandcode-api/inkling-small",
+      "gatewayModel": "commandcode-api-inkling-small",
+      "upstreamModel": "thinkingmachines/inkling-small",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Inkling Small (Command Code API)",
+      "description": "Inkling Small through the Command Code Provider API.",
+      "priority": 128,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-inkling-small-v1"
+    },
+    {
+      "slug": "commandcode-api/inkling",
+      "gatewayModel": "commandcode-api-inkling",
+      "upstreamModel": "thinkingmachines/inkling",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Inkling (Command Code API)",
+      "description": "Inkling through the Command Code Provider API.",
+      "priority": 127,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 256000,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-inkling-v1"
+    },
+    {
+      "slug": "commandcode-api/Kimi-K2.7-Code-Highspeed",
+      "gatewayModel": "commandcode-api-kimi-k2-7-code-highspeed",
+      "upstreamModel": "moonshotai/Kimi-K2.7-Code-Highspeed",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Kimi K2.7 Code HighSpeed (Command Code API)",
+      "description": "Kimi K2.7 Code HighSpeed through the Command Code Provider API.",
+      "priority": 106,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 262000,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-kimi-k2-7-code-highspeed-v1"
+    },
+    {
+      "slug": "commandcode-api/Kimi-K2.7-Code",
+      "gatewayModel": "commandcode-api-kimi-k2-7-code",
+      "upstreamModel": "moonshotai/Kimi-K2.7-Code",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Kimi K2.7 Code (Command Code API)",
+      "description": "Kimi K2.7 Code through the Command Code Provider API.",
+      "priority": 105,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 256000,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-kimi-k2-7-code-v1"
+    },
+    {
+      "slug": "commandcode-api/Kimi-K3",
+      "gatewayModel": "commandcode-api-kimi-k3",
+      "upstreamModel": "moonshotai/Kimi-K3",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Kimi K3 (Command Code API)",
+      "description": "Kimi K3 through the Command Code Provider API.",
+      "priority": 104,
+      "defaultEffort": "max",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Balanced deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "requestProfile": "kimi-k3",
+      "compHash": "commandcode-api-kimi-k3-v1"
+    },
+    {
+      "slug": "commandcode-api/laguna-s-2.1-free",
+      "gatewayModel": "commandcode-api-laguna-s-2-1",
+      "upstreamModel": "poolside/laguna-s-2.1-free",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Laguna S 2.1 (Command Code API)",
+      "description": "Laguna S 2.1 through the Command Code Provider API.",
+      "priority": 129,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 256000,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-laguna-s-2-1-v1"
+    },
+    {
+      "slug": "commandcode-api/mimo-v2.5-pro",
+      "gatewayModel": "commandcode-api-mimo-v2-5-pro",
+      "upstreamModel": "xiaomi/mimo-v2.5-pro",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "MiMo-V2.5-Pro (Command Code API)",
+      "description": "MiMo-V2.5-Pro through the Command Code Provider API.",
+      "priority": 113,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-mimo-v2-5-pro-v1"
+    },
+    {
+      "slug": "commandcode-api/MiniMax-M2.7",
+      "gatewayModel": "commandcode-api-minimax-m2-7",
+      "upstreamModel": "MiniMaxAI/MiniMax-M2.7",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "MiniMax M2.7 (Command Code API)",
+      "description": "MiniMax M2.7 through the Command Code Provider API.",
+      "priority": 112,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 200000,
+      "autoCompact": 180000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-minimax-m2-7-v1"
+    },
+    {
+      "slug": "commandcode-api/MiniMax-M3",
+      "gatewayModel": "commandcode-api-minimax-m3",
+      "upstreamModel": "MiniMaxAI/MiniMax-M3",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "MiniMax M3 (Command Code API)",
+      "description": "MiniMax M3 through the Command Code Provider API.",
+      "priority": 111,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-minimax-m3-v1"
+    },
+    {
+      "slug": "commandcode-api/muse-spark-1.2",
+      "gatewayModel": "commandcode-api-muse-spark-1-2",
+      "upstreamModel": "meta/muse-spark-1.2",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Muse Spark 1.2 (Command Code API)",
+      "description": "Muse Spark 1.2 through the Command Code Provider API.",
+      "priority": 124,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1048576,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-muse-spark-1-2-v1"
+    },
+    {
+      "slug": "commandcode-api/nemotron-3-ultra-550b-a55b",
+      "gatewayModel": "commandcode-api-nemotron-3-ultra",
+      "upstreamModel": "nvidia/nemotron-3-ultra-550b-a55b",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Nemotron 3 Ultra (Command Code API)",
+      "description": "Nemotron 3 Ultra through the Command Code Provider API.",
+      "priority": 125,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-nemotron-3-ultra-v1"
+    },
+    {
+      "slug": "commandcode-api/Qwen3.7-Flash",
+      "gatewayModel": "commandcode-api-qwen3-7-flash",
+      "upstreamModel": "Qwen/Qwen3.7-Flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Qwen3.7 Flash (Command Code API)",
+      "description": "Qwen3.7 Flash through the Command Code Provider API.",
+      "priority": 110,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-qwen3-7-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/Qwen3.7-Max",
+      "gatewayModel": "commandcode-api-qwen3-7-max",
+      "upstreamModel": "Qwen/Qwen3.7-Max",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Qwen3.7 Max (Command Code API)",
+      "description": "Qwen3.7 Max through the Command Code Provider API.",
+      "priority": 108,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-qwen3-7-max-v1"
+    },
+    {
+      "slug": "commandcode-api/Qwen3.7-Plus",
+      "gatewayModel": "commandcode-api-qwen3-7-plus",
+      "upstreamModel": "Qwen/Qwen3.7-Plus",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Qwen3.7 Plus (Command Code API)",
+      "description": "Qwen3.7 Plus through the Command Code Provider API.",
+      "priority": 109,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-qwen3-7-plus-v1"
+    },
+    {
+      "slug": "commandcode-api/Qwen3.8-Max",
+      "gatewayModel": "commandcode-api-qwen3-8-max",
+      "upstreamModel": "Qwen/Qwen3.8-Max",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Qwen3.8 Max (Command Code API)",
+      "description": "Qwen3.8 Max through the Command Code Provider API.",
+      "priority": 107,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-qwen3-8-max-v1"
+    },
+    {
+      "slug": "commandcode-api/Step-3.7-Flash",
+      "gatewayModel": "commandcode-api-step-3-7-flash",
+      "upstreamModel": "stepfun/Step-3.7-Flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Step 3.7 Flash (Command Code API)",
+      "description": "Step 3.7 Flash through the Command Code Provider API.",
+      "priority": 123,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 256000,
+      "autoCompact": 235000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-step-3-7-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/ox-alpha",
+      "gatewayModel": "commandcode-api-stealth-ox-alpha",
+      "upstreamModel": "stealth/ox-alpha",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "stealth/ox-alpha (Command Code API)",
+      "description": "stealth/ox-alpha through the Command Code Provider API.",
+      "priority": 100,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 1048576,
+      "autoCompact": 891289,
+      "inputModalities": [
+        "text"
+      ],
+      "requestProfile": "kimi-k3",
+      "compHash": "commandcode-api-stealth-ox-alpha-v1"
+    },
+    {
+      "slug": "commandcode-api/deepseek-v4-flash-vision-exp",
+      "gatewayModel": "commandcode-api-deepseek-deepseek-v4-flash-vision-exp",
+      "upstreamModel": "deepseek/deepseek-v4-flash-vision-exp",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "deepseek/deepseek-v4-flash-vision-exp (Command Code API)",
+      "description": "deepseek/deepseek-v4-flash-vision-exp through the Command Code Provider API.",
+      "priority": 101,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 850000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "requestProfile": "kimi-k3",
+      "compHash": "commandcode-api-deepseek-deepseek-v4-flash-vision-exp-v1"
+    }
+  ]
+}
