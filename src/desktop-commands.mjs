@@ -80,6 +80,11 @@ export const COMMANDS = {
     timeoutMs: OAUTH_LOGIN_TIMEOUT_MS,
     then: ["providers", "--json"],
   }),
+  reauth_oauth: ({ provider }) => ({
+    args: ["reauth", requireProvider(provider)],
+    timeoutMs: OAUTH_LOGIN_TIMEOUT_MS,
+    then: ["providers", "--json"],
+  }),
   save_api_key: ({ provider, apiKey }) => {
     if (!String(apiKey ?? "").trim()) throw new Error("Enter a credential first.");
     if (String(apiKey).length > 16 * 1024) throw new Error("The credential is too large.");

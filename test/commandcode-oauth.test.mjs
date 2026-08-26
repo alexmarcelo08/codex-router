@@ -73,6 +73,10 @@ test("the onboarding snapshot renders the OAuth provider, not an API-key card", 
     assert.equal(provider.kind, "oauth");
     assert.equal(provider.credentialLabel, "OAuth session");
     assert.equal(provider.configured, true);
+    // A configured CLI session can still be re-authenticated (expired token,
+    // wrong account, plan change); the tray surfaces it so the user can re-run
+    // the browser sign-in without disconnecting.
+    assert.equal(provider.reauth, true);
     assert.ok(["ready", "login"].includes(provider.action));
     // The API-key sibling stays its own provider, not folded into the OAuth one.
     const api = providerOnboardingSnapshot().providers.find((entry) => entry.id === "commandcode-api");

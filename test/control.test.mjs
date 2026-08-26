@@ -86,6 +86,12 @@ function probe(target, providers, usageEvents = [], options = {}) {
       encoding: "utf8",
       env: {
         ...process.env,
+        // commandCodeAuthPath resolves the CLI OAuth session against the real
+        // home, which os.homedir() derives from getpwuid (it ignores HOME).
+        // Point the Command Code auth home at the empty probe dir so a live
+        // ~/.commandcode/auth.json cannot leak in and misreport the OAuth
+        // provider as configured on a machine that genuinely signed in.
+        COMMANDCODE_AUTH_HOME: stateDir,
         CODEX_HOME: stateDir,
         MODEL_ROUTER_TARGET: target,
         MODEL_ROUTER_STATE_DIR: stateDir,
@@ -969,6 +975,10 @@ test("aggregate overview exposes the router-owned catalog separately from client
       encoding: "utf8",
       env: {
         ...process.env,
+        // Isolate the Command Code CLI OAuth session so a live sign-in on the
+        // host cannot mark commandcode as configured and flip its ox-alpha
+        // route to available in this catalog overview.
+        COMMANDCODE_AUTH_HOME: stateDir,
         CODEX_HOME: stateDir,
         MODEL_ROUTER_STATE_DIR: stateDir,
       },

@@ -131,6 +131,10 @@ export function providerOnboardingSnapshot() {
           configured,
           cliInstalled,
           cliRunnable: cliInstalled,
+          // A configured session can still be re-authenticated (an expired
+          // token, a wrong account, or a plan change); surface it so the UI
+          // can offer "Re-authenticate" instead of only "ready".
+          reauth: configured ? true : false,
           action: !cliInstalled
             ? "install"
             : configured

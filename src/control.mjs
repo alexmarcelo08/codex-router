@@ -2776,6 +2776,9 @@ if (args.includes("--probe")) {
 } else if (args[0] === "login") {
   if (!args[1]) throw new Error("Usage: control login <oauth-provider>");
   await loginProvider(args[1]);
+} else if (args[0] === "reauth") {
+  if (!args[1]) throw new Error("Usage: control reauth <oauth-provider>");
+  await loginProvider(args[1]);
 } else if (args[0] === "catalog-cache") {
   if (args[1] !== "invalidate" || !args[2]) {
     throw new Error("Usage: control catalog-cache invalidate <provider>");

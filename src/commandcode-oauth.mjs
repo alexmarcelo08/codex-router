@@ -21,10 +21,16 @@ function apiEnvironment(environment = process.env) {
 
 export function commandCodeAuthPath({ homeDir, apiEnv } = {}) {
   const fileName = AUTH_FILE_NAMES[apiEnv || apiEnvironment()] || AUTH_FILE_NAMES.prod;
-  // Honor a virtual CODEX_HOME (used by hermetic tests and by tools that keep
-  // Codex state elsewhere) the same way the rest of the router's paths do.
-  // Falling back to the real home keeps the production case unchanged.
-  const base = homeDir || process.env.CODEX_HOME || os.homedir();
+  // The Command Code CLI always writes its OAuth session to `~/.commandcode/`
+  // in the user's real home. `CODEX_HOME` must never redirect this lookup: the
+  // launchd service sets `CODEX_HOME` to the Codex state dir, and pointing the
+  // CLI auth file there makes a working OAuth session look missing. Only an
+  // explicit `homeDir` (hermetic tests) or a dedicated Command Code auth home
+  // override redirects it off the real home.
+  const base =
+    homeDir ||
+    process.env.COMMANDCODE_AUTH_HOME ||
+    os.homedir();
   return path.join(base, ".commandcode", fileName);
 }
 
