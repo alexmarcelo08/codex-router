@@ -2,6 +2,116 @@
 
 ## Unreleased
 
+- **Subagent selection is honoured again.** `applyMultiAgentSettings` only ever
+  demoted: it read `disabled` and `hidden` and nothing else, so the three modes
+  documented in `.claude/skills/codex-subagents/SKILL.md` — `proven`,
+  `selected`, `all` — were inert and every selection an operator had made was
+  silently discarded. An install running `mode: selected` with twenty routes
+  enabled had four spawnable and one agent definition on disk, while
+  `subagents status` cheerfully reported the twenty. The modes work as
+  documented again: an explicit `off` still beats every mode, a hidden model is
+  never promoted, and only an explicit choice promotes — a machine-local probe
+  still promotes nothing on its own. **On upgrade this changes what Codex is
+  offered**: an install sitting on `mode: all`, or on `selected` with a stale
+  `enabled` list, will advertise those routes as subagents again, which is what
+  the setting always said it would do. `mode all` remains "every non-hidden
+  model, regardless of whether it works" — verify a route with the agent check
+  before relying on it (PR #439).
+
+- **Running the test suite no longer clears the operator's subagent
+  definitions.** Four tests in `test/control.test.mjs` pointed
+  `MODEL_ROUTER_STATE_DIR` at a temporary directory but left `CODEX_HOME`
+  alone. `subagents set` republishes the catalog, and the agent definitions it
+  writes are keyed off `CODEX_HOME`, so every `npm test` emptied
+  `~/.codex/agents` on the machine running it — seventeen definitions before,
+  none after, restored by the next publish, with a doctor `FAIL` as the only
+  trace. The publish that clears them also says so now, rather than emptying
+  the directory in silence (PR #439).
+
+- **A provider reachable only through the proxy no longer reads as a broken
+  one.** The Control Center is launched by the desktop session, so it inherits
+  `HTTP_PROXY` from the login environment but nothing telling Node it may use
+  it — the address and the permission to use it are separate answers. A
+  discovery child then dialled the provider directly and its connect timeout
+  was reported as the provider failing, which is how a reachable Venice catalog
+  came back as `fetch failed`. Children spawned by the app now read the opt-in
+  the install manifest recorded, and only for the install that recorded it;
+  only the opt-in is restored, never an address (PR #439).
+
+- **The Models page is one list.** Two sections both changed what ended up in
+  the picker, six words described three concepts, and a row jumped to a
+  different group the moment its switch was flipped. Provider accounts collapse
+  into a connections strip, one **Add models** dialog searches every connected
+  catalog, and row order no longer depends on the switches. The Subagents
+  column stopped offering a compatibility test that could not enable anything —
+  turning the switch on now selects the route and the router publishes it, one
+  click from off to spawnable. `docs/SUBAGENT-CERTIFICATION.md` records what
+  the five-check certification can and cannot establish, including that checks
+  3-5 cannot complete while Codex is signed in with a ChatGPT account, so the
+  next reader does not spend provider quota re-learning it (PR #439).
+
+- **Windows startup now fails fast when the scheduled task is dead instead of
+  polling health for its whole budget.** Task Scheduler can keep a stale
+  instance entry (or a Running state) after the launcher tree behind it has
+  died, so `service start` used to spend its entire readiness timeout waiting
+  for a router that nothing would ever start (issue #384, PR #387). Readiness
+  now reads the task from two places — the COM instance enumeration, and a
+  direct scan for a live process whose command line references the generated
+  launcher — and once both stop reporting a live launch for longer than a short
+  grace, fails with the task's own `LastTaskResult` instead of a generic
+  timeout. A task-state query failure is inconclusive and never fails the wait
+  by itself, so a restricted shell still receives the full health budget rather
+  than a false failure. The health answer itself is normalized to one contract
+  before the guard trusts it — healthy only when the router actually answered,
+  whether the probe resolves or rejects — and a Windows interpreter probe that
+  merely times out under process-launch contention, which is not evidence of a
+  broken virtual environment, is retried once with a wider bound before install
+  reports a condition that was transient all along.
+
+- **ChatGPT subscription access for non-Codex clients is now an explicit,
+  one-time local authorization.** A discovered Codex `auth.json` no longer
+  silently lets DeepSeek Harness, Gemini CLI, or another caller-key client
+  spend the account. After `codex login`, the user runs `model-router codex
+  chatgpt-session enable` once; an owner-only, credential-free marker applies
+  that decision to every client on the shared loopback router plane. Disabling
+  it revokes native GPT publication everywhere without signing Codex out. A
+  missing or malformed authorization and a missing or expired session both
+  fail closed. External model routes and Codex's own session pass-through are
+  unchanged.
+
+- **Ox Alpha ships on six routes.** The stealth 1M-context reasoning model is
+  now checked in for `opencode-free` (no key), `opencode-go`, `openrouter`,
+  `commandcode`, `nousresearch`, and `venice`, each under the upstream id that
+  provider's own live catalog publishes. All six advertise 1,048,576 tokens
+  with 131,072 of output, text+image input, and a low/high/max effort ladder
+  defaulting to max — the model always thinks, and its upstream refuses any
+  other rung by name ("please use low, high, or max"). Venice's catalog
+  advertises a fourth rung the model rejects; the model wins, and the
+  disagreement is written down rather than silently resolved. A new `ox-alpha`
+  request profile clamps the requested effort onto those three rungs, which is
+  load-bearing rather than defensive: a Codex older than 0.143 has no `max` in
+  its enum, so the catalog sends the clamped `xhigh` and every turn would
+  otherwise 400. Only the credential-free route carries curated announcement
+  copy; the other five use the automatic announcement once their provider is
+  credentialed.
+
+- **Venice and Nous Research (Hermes) are new API-key providers.** Both are
+  selectable through `install.sh --providers`, `providers enable`, and the
+  tray, both ship a provider mark, and both are covered by `doctor`. Venice
+  carries a plan note because a free Venice account has no API entitlement at
+  all — API access needs a Pro subscription, a funded USD balance, or staked
+  VVV that grants VCU.
+
+- **The tray and control center show what these subscriptions have left.**
+  Venice's `api_keys/rate_limits` route is wired into `provider-usage`, so the
+  tray reports all three pools that can fund a request (USD, VCU, and the daily
+  DIEM allowance) plus the API tier, instead of showing a zero to someone whose
+  VCU balance is full. OpenRouter now reports its per-key spend cap from
+  `/api/v1/key`, adding the account-wide credit pool when the stored key is a
+  management key and keeping the per-key numbers when it is not. Nous Portal
+  publishes no credits route at all, so it degrades to its subscription page
+  and observed router traffic rather than inventing a number.
+
 - **Private state files are hardened with a canonical owner-only ACL on
   Windows.** The previous Windows path asked `GetAccessControl` about the
   file's existing DACL and then edited it with `SetAccessRuleProtection` and

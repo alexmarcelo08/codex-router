@@ -543,7 +543,7 @@ test("router rewrites gateway errors to name the failing provider", async () => 
         Authorization: "Bearer CODEX_CALLER_SECRET",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model: "opencode-go/grok-4.5", input: "test" }),
+      body: JSON.stringify({ model: "opencode-go-responses/grok-4.5", input: "test" }),
     });
     assert.equal(response.status, 503);
     const payload = await response.json();
@@ -3067,6 +3067,8 @@ test("API forwarder routes Ollama Cloud models without unsupported parameters", 
       ["ollama-cloud-glm-5-2", "glm-5.2", "minimal", "none"],
       ["ollama-cloud-glm-5-2", "glm-5.2", "bogus", "high"],
       ["ollama-cloud-kimi-k2-7-code", "kimi-k2.7-code", "high", "high"],
+      ["ollama-cloud-kimi-k3", "kimi-k3:cloud", "low", "low"],
+      ["ollama-cloud-kimi-k3", "kimi-k3:cloud", "max", "max"],
     ]) {
       const response = await fetch(
         `http://127.0.0.1:${forwarderPort}/v1/chat/completions`,
@@ -3154,6 +3156,52 @@ test("API forwarder routes Ollama Cloud models without unsupported parameters", 
   }
 });
 
+
+test("API forwarder surfaces Ollama Cloud upstream failures for Kimi K3", async () => {
+  const upstream = await mockServer(async (request, response) => {
+    await bodyJson(request);
+    json(response, 503, {
+      error: { message: "model overloaded", type: "server_error" },
+    });
+  });
+  const forwarderPort = await openPort();
+  const forwarder = run("api-forwarder.mjs", {
+    CODEX_ROUTER_API_PORT: String(forwarderPort),
+    OLLAMA_CLOUD_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    OLLAMA_API_KEY: "TEST_OLLAMA_CLOUD_KEY",
+    CODEX_ROUTER_QUIET: "1",
+  });
+
+  try {
+    await waitFor(`http://127.0.0.1:${forwarderPort}/health`, forwarder, {
+      Authorization: `Bearer ${INTERNAL_KEY}`,
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${forwarderPort}/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "ollama-cloud-kimi-k3",
+          reasoning_effort: "max",
+          messages: [{ role: "user", content: "test" }],
+        }),
+      },
+    );
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.ok(
+      payload.error.message.includes("model overloaded"),
+      `expected upstream error message preserved, got: ${payload.error.message}`,
+    );
+  } finally {
+    await stopChild(forwarder);
+    await closeServer(upstream.server);
+  }
+});
 
 test("API forwarder routes Qwen plan models without unsupported parameters", async () => {
   const upstreamRequests = [];
@@ -5755,6 +5803,124 @@ test("router ages consumed large tool results but preserves the newest result fr
   }
 });
 
+test("token maxxing shapes the newest result and injects terse instructions only under pressure", async () => {
+  const gatewayBodies = [];
+  const gateway = await mockServer(async (request, response) => {
+    gatewayBodies.push(await bodyJson(request));
+    json(response, 200, { output: [{ type: "message", role: "assistant", content: "ok" }] });
+  });
+  const stateDir = mkdtempSync(path.join(os.tmpdir(), "routing-token-maxxing-"));
+  writeFileSync(
+    path.join(stateDir, "tool-result-aging.json"),
+    JSON.stringify({ version: 1, enabled: true, nativeEnabled: false }),
+  );
+  const routerPort = await openPort();
+  const router = run("router.mjs", {
+    CODEX_ROUTER_PORT: String(routerPort),
+    CODEX_ROUTER_GATEWAY_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
+    CODEX_ROUTER_QUIET: "1",
+    MODEL_ROUTER_STATE_DIR: stateDir,
+  });
+  const turn = (value) => ({
+    model: "deepseek/deepseek-v4-pro",
+    stream: false,
+    instructions: "Base instructions.",
+    input: [
+      { type: "function_call", call_id: "latest", name: "exec_command", arguments: "{}" },
+      { type: "function_call_output", call_id: "latest", output: value },
+    ],
+  });
+  const lowPressure = "ordinary noise\n".repeat(10_000);
+  const highPressure = "repeated build progress\n".repeat(110_000);
+
+  try {
+    await waitFor(`${routerBase(routerPort)}/models`, router);
+    for (const value of [lowPressure, highPressure]) {
+      const response = await fetch(`${routerBase(routerPort)}/responses`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer CODEX_CALLER_SECRET",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(turn(value)),
+      });
+      assert.equal(response.status, 200, await response.text());
+    }
+
+    assert.equal(gatewayBodies[0].input[1].output, lowPressure);
+    assert.equal(gatewayBodies[0].instructions, "Base instructions.");
+    assert.match(gatewayBodies[1].input[1].output, /Tool result shaped by Codex Router token maxxing/u);
+    assert.match(gatewayBodies[1].input[1].output, /same line repeated 109999 more times/u);
+    assert.match(gatewayBodies[1].instructions, /## Context pressure mode/u);
+    assert.match(gatewayBodies[1].instructions, /Be terse in commentary and final prose/u);
+
+    const events = await waitForUsageEvents(stateDir, 2, router);
+    assert.equal(events[0].toolResultsShaped, undefined);
+    assert.equal(events[1].toolResultsShaped, 1);
+    assert.ok(events[1].toolResultShapeBytesSaved > 2_000_000);
+  } finally {
+    await stopChild(router);
+    await closeServer(gateway.server);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("token maxxing counts collaboration payloads after they become model-visible", async () => {
+  const gatewayBodies = [];
+  const gateway = await mockServer(async (request, response) => {
+    gatewayBodies.push(await bodyJson(request));
+    json(response, 200, { output: [{ type: "message", role: "assistant", content: "ok" }] });
+  });
+  const stateDir = mkdtempSync(path.join(os.tmpdir(), "routing-token-maxxing-agent-"));
+  writeFileSync(
+    path.join(stateDir, "tool-result-aging.json"),
+    JSON.stringify({ version: 1, enabled: true, nativeEnabled: false }),
+  );
+  const routerPort = await openPort();
+  const router = run("router.mjs", {
+    CODEX_ROUTER_PORT: String(routerPort),
+    CODEX_ROUTER_GATEWAY_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
+    CODEX_ROUTER_QUIET: "1",
+    MODEL_ROUTER_STATE_DIR: stateDir,
+  });
+  const payloadText = "repeated delegated payload\n".repeat(100_000);
+  const input = [
+    {
+      type: "message",
+      role: "user",
+      content: [
+        { type: "input_text", text: "Message Type: NEW_TASK\nPayload:" },
+        { type: "encrypted_content", encrypted_content: payloadText },
+      ],
+    },
+  ];
+
+  try {
+    await waitFor(`${routerBase(routerPort)}/models`, router);
+    const response = await fetch(`${routerBase(routerPort)}/responses`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer CODEX_CALLER_SECRET",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-v4-pro",
+        stream: false,
+        instructions: "Base instructions.",
+        input,
+      }),
+    });
+    assert.equal(response.status, 200, await response.text());
+    assert.equal(gatewayBodies.length, 1);
+    assert.equal(gatewayBodies[0].input[0].content.at(-1).text, payloadText);
+    assert.match(gatewayBodies[0].instructions, /## Context pressure mode/u);
+  } finally {
+    await stopChild(router);
+    await closeServer(gateway.server);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("tool-result aging kill switch forwards the same large output", async () => {
   const gatewayBodies = [];
   const gateway = await mockServer(async (request, response) => {
@@ -6714,6 +6880,190 @@ test("a plain follow-up after a thinking turn replays its reasoning", async () =
   }
 });
 
+test("router removes DeepSeek's confirmed blank message before a tool call", async () => {
+  const blankMessage = {
+    id: "msg_blank",
+    type: "message",
+    status: "completed",
+    role: "assistant",
+    content: [{ type: "output_text", text: "", annotations: [] }],
+  };
+  const functionCall = {
+    id: "call_list",
+    type: "function_call",
+    call_id: "call_list",
+    name: "exec_command",
+    arguments: "{}",
+    status: "completed",
+  };
+  const gateway = await mockServer(async (request, response) => {
+    await bodyJson(request);
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    const events = [
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { ...blankMessage, status: "in_progress", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: blankMessage.id,
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        item: { ...functionCall, arguments: "", status: "in_progress" },
+      },
+      {
+        type: "response.function_call_arguments.done",
+        item_id: functionCall.id,
+        output_index: 1,
+        arguments: "{}",
+      },
+      { type: "response.output_item.done", output_index: 1, item: functionCall },
+      {
+        type: "response.output_text.done",
+        item_id: blankMessage.id,
+        output_index: 0,
+        content_index: 0,
+        text: "",
+      },
+      {
+        type: "response.content_part.done",
+        item_id: blankMessage.id,
+        output_index: 0,
+        content_index: 0,
+        part: { type: "reasoning_text", reasoning: "private reasoning" },
+      },
+      { type: "response.output_item.done", output_index: 0, item: blankMessage },
+      {
+        type: "response.completed",
+        response: {
+          id: "resp_tool_only",
+          status: "completed",
+          output: [blankMessage, functionCall],
+          usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+        },
+      },
+    ];
+    response.end(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""));
+  });
+  const routerPort = await openPort();
+  const router = run("router.mjs", {
+    CODEX_ROUTER_PORT: String(routerPort),
+    CODEX_ROUTER_GATEWAY_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
+    CODEX_ROUTER_QUIET: "1",
+  });
+
+  try {
+    await waitFor(`${routerBase(routerPort)}/models`, router);
+    const response = await fetch(`${routerBase(routerPort)}/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-v4-flash-vision-exp",
+        input: "list files",
+        stream: true,
+      }),
+    });
+    const text = await response.text();
+    assert.equal(response.status, 200, text);
+    const events = text.split(/\r?\n/)
+      .filter((line) => line.startsWith("data: {"))
+      .map((line) => JSON.parse(line.slice(5).trim()));
+    assert.equal(text.includes(blankMessage.id), false);
+    assert.equal(text.includes("private reasoning"), false);
+    const toolEvents = events.filter(
+      (event) => (event.item_id ?? event.item?.id) === functionCall.id,
+    );
+    assert.ok(toolEvents.length >= 3);
+    assert.ok(toolEvents.every((event) => event.output_index === 0));
+    assert.deepEqual(
+      events.find((event) => event.type === "response.completed").response.output,
+      [functionCall],
+    );
+  } finally {
+    await stopChild(router);
+    await closeServer(gateway.server);
+  }
+});
+
+test("router does not compact the same blank-message shape on non-DeepSeek routes", async () => {
+  const blank = {
+    id: "msg_blank",
+    type: "message",
+    status: "completed",
+    role: "assistant",
+    content: [{ type: "output_text", text: "", annotations: [] }],
+  };
+  const tool = {
+    id: "call_list",
+    type: "function_call",
+    call_id: "call_id",
+    name: "exec_command",
+    arguments: "{}",
+    status: "completed",
+  };
+  const source = [
+    { type: "response.output_item.added", output_index: 0, item: { ...blank, status: "in_progress", content: [] } },
+    { type: "response.output_item.added", output_index: 1, item: { ...tool, status: "in_progress" } },
+    { type: "response.output_item.done", output_index: 0, item: blank },
+    {
+      type: "response.completed",
+      response: {
+        id: "resp_tool_only",
+        status: "completed",
+        output: [blank, tool],
+        usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+      },
+    },
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+  const gateway = await mockServer(async (request, response) => {
+    await bodyJson(request);
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(source);
+  });
+  const routerPort = await openPort();
+  const router = run("router.mjs", {
+    CODEX_ROUTER_PORT: String(routerPort),
+    CODEX_ROUTER_GATEWAY_BASE_URL: `http://127.0.0.1:${gateway.port}/v1`,
+    CODEX_ROUTER_QUIET: "1",
+  });
+
+  try {
+    await waitFor(`${routerBase(routerPort)}/models`, router);
+    const response = await fetch(`${routerBase(routerPort)}/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "opencode-go/deepseek-v4-flash",
+        input: "list files",
+        stream: true,
+      }),
+    });
+    const text = await response.text();
+    assert.equal(response.status, 200, text);
+    const events = text.split(/\r?\n/)
+      .filter((line) => line.startsWith("data: {"))
+      .map((line) => JSON.parse(line.slice(5).trim()));
+    assert.ok(text.includes(blank.id));
+    assert.equal(
+      events.find((event) => event.item?.id === tool.id).output_index,
+      1,
+    );
+    assert.deepEqual(
+      events.find((event) => event.type === "response.completed").response.output,
+      [blank, tool],
+    );
+  } finally {
+    await stopChild(router);
+    await closeServer(gateway.server);
+  }
+});
+
 
 test("router repairs malformed Z.ai message envelopes after LiteLLM Responses translation", async () => {
   const testRoot = mkdtempSync(path.join(os.tmpdir(), "zai-responses-compat-router-"));
@@ -6784,8 +7134,8 @@ function curatedZenFreeCompatibilityModels() {
   const dir = mkdtempSync(path.join(os.tmpdir(), "routing-opencode-tool-model-"));
   const file = path.join(dir, "user-models.json");
   const ox = {
-    slug: "opencode-free/x-preview-f-free",
-    gatewayModel: "opencode-free-x-preview-f-free",
+    slug: "opencode-free/ox-alpha",
+    gatewayModel: "opencode-free-ox-alpha",
     upstreamModel: "x-preview-f-free",
     provider: "opencode-free",
   };
@@ -6811,7 +7161,7 @@ function curatedZenFreeCompatibilityModels() {
           contextWindow: 131072,
           autoCompact: 110000,
           inputModalities: ["text", "image"],
-          compHash: "opencode-free-x-preview-f-free-user-v1",
+          compHash: "opencode-free-ox-alpha-user-v1",
         },
         {
           ...muse,
@@ -7744,5 +8094,129 @@ test("canceling a Zen Free Ox custom-tool stream stops the transformed pipeline"
     await stopChild(router);
     await closeServer(gateway.server);
     rmSync(curated.dir, { recursive: true, force: true });
+  }
+});
+
+// Ox Alpha rejects an off-ladder reasoning_effort with HTTP 400 rather than
+// ignoring it -- its upstream answers "[1210] This model always engages in
+// thinking and cannot be disabled; please use low, high, or max". Codex can
+// send any rung it knows, and an installation older than 0.143 has no `max` in
+// its enum at all: the catalog clamps the model's default down to `xhigh` for
+// those, so `xhigh` is what arrives here and must land back on `max`.
+test("API forwarder clamps Ox Alpha efforts onto the ladder the model accepts", async () => {
+  const upstreamRequests = [];
+  const upstream = await mockServer(async (request, response) => {
+    upstreamRequests.push({ headers: request.headers, body: await bodyJson(request) });
+    json(response, 200, { choices: [] });
+  });
+  const forwarderPort = await openPort();
+  const forwarder = run("api-forwarder.mjs", {
+    CODEX_ROUTER_API_PORT: String(forwarderPort),
+    OPENCODE_GO_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    OPENCODE_API_KEY: "TEST_OPENCODE_OX_KEY",
+    OPENROUTER_API_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    OPENROUTER_API_KEY: "TEST_OPENROUTER_OX_KEY",
+    COMMANDCODE_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    COMMAND_CODE_API_KEY: "TEST_COMMANDCODE_OX_KEY",
+    NOUS_API_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    NOUS_API_KEY: "TEST_NOUS_OX_KEY",
+    VENICE_API_BASE_URL: `http://127.0.0.1:${upstream.port}`,
+    VENICE_API_KEY: "TEST_VENICE_OX_KEY",
+    CODEX_ROUTER_QUIET: "1",
+  });
+
+  try {
+    await waitFor(`http://127.0.0.1:${forwarderPort}/health`, forwarder, {
+      Authorization: `Bearer ${INTERNAL_KEY}`,
+    });
+    for (const [gatewayModel, upstreamModel, credential, sentEffort, expectedEffort] of [
+      // The three rungs the upstream names.
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "low", "low"],
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "high", "high"],
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "max", "max"],
+      // The pre-0.143 Codex enum tops out at xhigh; it must not reach upstream.
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "xhigh", "max"],
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "ultra", "max"],
+      // Rungs the route does not publish take the nearest one at or below.
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "medium", "low"],
+      ["opencode-go-ox-alpha", "ox-alpha-free", "TEST_OPENCODE_OX_KEY", "minimal", "low"],
+      // Every credentialed reseller reaches its own id and credential while
+      // sharing the model's ladder normalization.
+      ["openrouter-ox-alpha", "stealth/ox-alpha", "TEST_OPENROUTER_OX_KEY", "xhigh", "max"],
+      ["commandcode-ox-alpha", "stealth/ox-alpha", "TEST_COMMANDCODE_OX_KEY", "medium", "low"],
+      ["nousresearch-ox-alpha", "stealth/ox-alpha", "TEST_NOUS_OX_KEY", "minimal", "low"],
+      ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "max", "max"],
+      ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "xhigh", "max"],
+      ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "medium", "low"],
+      ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "minimal", "low"],
+    ]) {
+      const response = await fetch(
+        `http://127.0.0.1:${forwarderPort}/v1/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${INTERNAL_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: gatewayModel,
+            reasoning_effort: sentEffort,
+            thinking: { type: "enabled" },
+            messages: [{ role: "user", content: "test" }],
+          }),
+        },
+      );
+      assert.equal(response.status, 200);
+      const request = upstreamRequests.at(-1);
+      assert.equal(request.body.model, upstreamModel);
+      assert.equal(request.headers.authorization, `Bearer ${credential}`);
+      assert.equal(request.body.reasoning_effort, expectedEffort);
+      // Thinking cannot be switched off on this model and none of the routes
+      // document the parameter, so it never travels.
+      assert.equal(request.body.thinking, undefined);
+    }
+
+    // An absent effort stays absent, which is the upstream's own default (the
+    // top rung) rather than a rung this router picked.
+    await fetch(`http://127.0.0.1:${forwarderPort}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${INTERNAL_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "opencode-go-ox-alpha",
+        messages: [{ role: "user", content: "test" }],
+      }),
+    });
+    assert.equal(upstreamRequests.at(-1).body.reasoning_effort, undefined);
+
+    // Forcing a tool choice is observed to work on every Ox Alpha route, so the
+    // profile must not quietly downgrade it the way the thinking providers do.
+    for (const model of [
+      "opencode-go-ox-alpha",
+      "openrouter-ox-alpha",
+      "commandcode-ox-alpha",
+      "nousresearch-ox-alpha",
+      "venice-ox-alpha",
+    ]) {
+      await fetch(`http://127.0.0.1:${forwarderPort}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          reasoning_effort: "low",
+          tool_choice: "required",
+          messages: [{ role: "user", content: "test" }],
+        }),
+      });
+      assert.equal(upstreamRequests.at(-1).body.tool_choice, "required");
+    }
+  } finally {
+    await stopChild(forwarder);
+    await closeServer(upstream.server);
   }
 });

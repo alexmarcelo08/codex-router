@@ -1,8 +1,10 @@
+import { randomBytes, scryptSync } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { writePrivateJson } from "./file-security.mjs";
-import { PROVIDER_CATALOG_CACHE_PATH } from "./paths.mjs";
+import { INTERNAL_SECRET_PATH, PROVIDER_CATALOG_CACHE_PATH } from "./paths.mjs";
+import { withProviderCatalogLock } from "./provider-catalog-lock.mjs";
 
 // Asking a provider what it serves is a network round trip against a live
 // credential, and the answer barely moves between releases. Re-asking it every
@@ -26,6 +28,36 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_PROVIDERS = 80;
 const MAX_MODELS = 4000;
 const PROVIDER_ID = /^[a-z0-9][a-z0-9._-]{0,80}$/i;
+const IDENTITY_FINGERPRINT = /^[a-f0-9]{64}$/;
+const PROCESS_IDENTITY_KEY = randomBytes(32);
+const IDENTITY_SCRYPT_OPTIONS = Object.freeze({ N: 16_384, r: 8, p: 1, maxmem: 32 * 1024 * 1024 });
+
+function providerCatalogIdentityKey() {
+  try {
+    const key = readFileSync(INTERNAL_SECRET_PATH, "utf8").trim();
+    if (key.length >= 32) return key;
+  } catch {
+    // Discovery can be exercised before installation has created the router's
+    // internal secret. A process-local key keeps that cache account-bound for
+    // this process without persisting a verifier that supports offline guesses.
+  }
+  return PROCESS_IDENTITY_KEY;
+}
+
+// The cache must answer only for the effective account that produced it. This
+// memory-hard digest is a private verifier, never a credential. The
+// installation's independent internal secret is its salt, so somebody who
+// obtains only the private cache cannot test credential guesses, and scrypt
+// keeps verification expensive even if both private files are compromised.
+export function providerCatalogIdentityFingerprint(parts) {
+  const values = Array.isArray(parts) ? parts : [parts];
+  return scryptSync(
+    JSON.stringify(values.map((value) => value ?? null)),
+    providerCatalogIdentityKey(),
+    32,
+    IDENTITY_SCRYPT_OPTIONS,
+  ).toString("hex");
+}
 
 function readCacheDocument() {
   if (!existsSync(PROVIDER_CATALOG_CACHE_PATH)) return { version: CACHE_VERSION, providers: {} };
@@ -65,8 +97,79 @@ function contextMap(value, allowed) {
   return Object.keys(lengths).length ? lengths : undefined;
 }
 
+function boundedStringList(value, limit = 16) {
+  if (!Array.isArray(value)) return undefined;
+  const kept = [...new Set(value
+    .filter((item) => typeof item === "string" && item.trim())
+    .map((item) => item.trim().slice(0, 80)))]
+    .slice(0, limit);
+  return kept.length ? kept : undefined;
+}
+
+function optionalBoolean(value) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function positiveInteger(value) {
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function normalizedReasoning(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const normalized = Object.fromEntries(Object.entries({
+    supported: optionalBoolean(value.supported),
+    configurable: optionalBoolean(value.configurable),
+    supportedEfforts: boundedStringList(value.supportedEfforts),
+    defaultEffort: typeof value.defaultEffort === "string" && value.defaultEffort.trim()
+      ? value.defaultEffort.trim().slice(0, 80)
+      : undefined,
+    mandatory: optionalBoolean(value.mandatory),
+    defaultEnabled: optionalBoolean(value.defaultEnabled),
+    advertisedSupportedEfforts: boundedStringList(value.advertisedSupportedEfforts),
+    advertisedDefaultEffort:
+      typeof value.advertisedDefaultEffort === "string" && value.advertisedDefaultEffort.trim()
+        ? value.advertisedDefaultEffort.trim().slice(0, 80)
+        : undefined,
+    effectiveMetadataSource:
+      typeof value.effectiveMetadataSource === "string" && value.effectiveMetadataSource.trim()
+        ? value.effectiveMetadataSource.trim().slice(0, 120)
+        : undefined,
+  }).filter(([, item]) => item !== undefined));
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function metadataMap(value, allowed) {
+  if (!value || typeof value !== "object") return undefined;
+  const entries = [];
+  for (const [id, item] of Object.entries(value)) {
+    if (!allowed.has(id) || !item || typeof item !== "object") continue;
+    const normalized = Object.fromEntries(Object.entries({
+      contextWindow: positiveInteger(item.contextWindow),
+      maxOutputTokens: positiveInteger(item.maxOutputTokens),
+      inputModalities: boundedStringList(item.inputModalities),
+      outputModalities: boundedStringList(item.outputModalities),
+      supportsTools: optionalBoolean(item.supportsTools),
+      supportsToolChoice: optionalBoolean(item.supportsToolChoice),
+      reasoning: normalizedReasoning(item.reasoning),
+      metadataSource: typeof item.metadataSource === "string" && item.metadataSource.trim()
+        ? item.metadataSource.trim().slice(0, 120)
+        : undefined,
+    }).filter(([, entry]) => entry !== undefined));
+    if (Object.keys(normalized).length) entries.push([id, normalized]);
+  }
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 function normalizedEntry(entry) {
   if (!entry || typeof entry !== "object") return undefined;
+  const identityFingerprint = typeof entry.identityFingerprint === "string"
+    && IDENTITY_FINGERPRINT.test(entry.identityFingerprint)
+    ? entry.identityFingerprint
+    : undefined;
+  // Pre-account-bound entries deliberately become misses. Serving one would
+  // expose the previous account's private model entitlements after an
+  // environment, Keychain, or official-CLI login changed outside the router.
+  if (!identityFingerprint) return undefined;
   const discovered = stringList(entry.discovered);
   if (!discovered?.length) return undefined;
   const fetchedAt = typeof entry.fetchedAt === "string" && entry.fetchedAt.trim()
@@ -75,11 +178,14 @@ function normalizedEntry(entry) {
   if (!fetchedAt) return undefined;
   const known = new Set(discovered);
   const free = stringList(entry.free)?.filter((id) => known.has(id));
+  const metadata = metadataMap(entry.metadata, known);
   return {
+    identityFingerprint,
     fetchedAt,
     discovered,
     ...(free?.length ? { free } : {}),
     ...(contextMap(entry.contextLengths, known) ? { contextLengths: contextMap(entry.contextLengths, known) } : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -109,13 +215,18 @@ export function readProviderCatalogCache(providerId) {
  * so a discovery run and its cache entry cannot disagree about when the list
  * was seen.
  */
-export function writeProviderCatalogCache(providerId, { discovered, free, contextLengths, fetchedAt } = {}) {
+function writeProviderCatalogCacheInTransaction(
+  providerId,
+  { discovered, free, contextLengths, metadata, fetchedAt, identityFingerprint } = {},
+) {
   if (!PROVIDER_ID.test(String(providerId || ""))) return undefined;
   const entry = normalizedEntry({
     discovered,
     free,
     contextLengths,
+    metadata,
     fetchedAt: fetchedAt || new Date().toISOString(),
+    identityFingerprint,
   });
   if (!entry) return undefined;
   const document = readCacheDocument();
@@ -134,14 +245,51 @@ export function writeProviderCatalogCache(providerId, { discovered, free, contex
   return entry;
 }
 
-/** Drop one provider's cached list, for example after its credential changes. */
-export function forgetProviderCatalogCache(providerId) {
-  if (!PROVIDER_ID.test(String(providerId || ""))) return false;
+/** Drop several providers' cached lists with one protected document rewrite. */
+function forgetProviderCatalogCachesInTransaction(providerIds) {
+  const ids = [...new Set(
+    (Array.isArray(providerIds) ? providerIds : [])
+      .map((providerId) => String(providerId || ""))
+      .filter((providerId) => PROVIDER_ID.test(providerId)),
+  )];
+  if (ids.length === 0) return 0;
   const document = readCacheDocument();
-  if (!(providerId in document.providers)) return false;
-  delete document.providers[providerId];
+  let removed = 0;
+  for (const providerId of ids) {
+    if (!(providerId in document.providers)) continue;
+    delete document.providers[providerId];
+    removed += 1;
+  }
+  if (removed === 0) return 0;
   writePrivateJson(PROVIDER_CATALOG_CACHE_PATH, document, { directoryMode: 0o700 });
-  return true;
+  return removed;
+}
+
+// All cache writers share one short cross-process transaction. Discovery does
+// its network round trip outside this boundary, then uses this API to compare
+// the credential snapshot and commit against the latest cache document. The
+// transaction object deliberately exposes no path and no arbitrary file IO.
+export function withProviderCatalogCacheTransaction(operation, options = {}) {
+  return withProviderCatalogLock(() => operation(Object.freeze({
+    read: readProviderCatalogCache,
+    write: writeProviderCatalogCacheInTransaction,
+    forget: forgetProviderCatalogCachesInTransaction,
+  })), options);
+}
+
+/** Record one answer without losing a concurrent provider's cache entry. */
+export function writeProviderCatalogCache(providerId, entry) {
+  return withProviderCatalogCacheTransaction((cache) => cache.write(providerId, entry));
+}
+
+/** Drop several providers atomically with respect to discovery commits. */
+export function forgetProviderCatalogCaches(providerIds) {
+  return withProviderCatalogCacheTransaction((cache) => cache.forget(providerIds));
+}
+
+/** Drop one provider's cached list, for example after its credential changes. */
+export async function forgetProviderCatalogCache(providerId) {
+  return await forgetProviderCatalogCaches([providerId]) > 0;
 }
 
 export const PROVIDER_CATALOG_CACHE_FILE = path.basename(PROVIDER_CATALOG_CACHE_PATH);

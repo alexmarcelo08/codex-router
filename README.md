@@ -167,6 +167,7 @@ Linux installations support the Codex CLI.
 | Claude Opus 4.8 (API) | `anthropic-api/claude-opus-4.8` | Separately billed Anthropic API key |
 | GLM-5.2 (Ollama Cloud) | `ollama-cloud/glm-5.2` | Ollama Cloud API key |
 | Kimi K2.7 Code (Ollama Cloud) | `ollama-cloud/kimi-k2.7-code` | Ollama Cloud API key |
+| Kimi K3 (Ollama Cloud) | `ollama-cloud/kimi-k3` | Ollama Cloud API key |
 | MiniMax M3 (Ollama Cloud) | `ollama-cloud/minimax-m3` | Ollama Cloud API key |
 | DeepSeek V4 Pro (Ollama Cloud) | `ollama-cloud/deepseek-v4-pro` | Ollama Cloud API key |
 | DeepSeek V4 Flash (Ollama Cloud) | `ollama-cloud/deepseek-v4-flash` | Ollama Cloud API key |
@@ -407,10 +408,14 @@ v2 models can run as subagents and which models appear in installed client
 pickers. Local settings cannot promote an unverified model. Fully quit and
 reopen Codex after changing either list; DeepSeek Harness hot-reloads its route,
 and the next Gemini CLI invocation reads the new environment.
+The Control Center keeps Go and pay-per-use Zen under this one credential card,
+but exposes each live catalog as a separate source. Loading a catalog only
+caches and previews its candidates; models are added to the picker only after
+the operator explicitly selects them.
 
 | Picker label | Model ID |
 | --- | --- |
-| Grok 4.5 (opencode Go) | `opencode-go/grok-4.5` |
+| Grok 4.5 (opencode Go) | `opencode-go-responses/grok-4.5` |
 | GLM-5.3 (opencode Go) | `opencode-go/glm-5.3` |
 | GLM-5.2 (opencode Go) | `opencode-go/glm-5.2` |
 | GLM-5.1 (opencode Go) | `opencode-go/glm-5.1` |
@@ -419,11 +424,13 @@ and the next Gemini CLI invocation reads the new environment.
 | Kimi K2.6 (opencode Go) | `opencode-go/kimi-k2.6` |
 | DeepSeek V4 Pro (opencode Go) | `opencode-go/deepseek-v4-pro` |
 | DeepSeek V4 Flash (opencode Go) | `opencode-go/deepseek-v4-flash` |
+| DeepSeek V4 Flash Vision Exp (opencode Go) | `opencode-go/deepseek-v4-flash-vision-exp` |
 | MiMo-V2.5 (opencode Go) | `opencode-go/mimo-v2.5` |
 | MiMo-V2.5-Pro (opencode Go) | `opencode-go/mimo-v2.5-pro` |
 | Hy3 (opencode Go) | `opencode-go/hy3` |
 | MiniMax M3 (opencode Go) | `opencode-go-messages/minimax-m3` |
 | MiniMax M2.7 (opencode Go) | `opencode-go-messages/minimax-m2.7` |
+| MiniMax M2.5 (opencode Go) | `opencode-go-messages/minimax-m2.5` |
 | Qwen3.8 Max (opencode Go) | `opencode-go-messages/qwen3.8-max` |
 | Qwen3.7 Max (opencode Go) | `opencode-go-messages/qwen3.7-max` |
 | Qwen3.7 Plus (opencode Go) | `opencode-go-messages/qwen3.7-plus` |
@@ -431,7 +438,8 @@ and the next Gemini CLI invocation reads the new environment.
 | GPT 5.6 Luna (opencode Go) | `opencode-go-responses/gpt-5.6-luna` |
 
 `opencode-go` carries the Chat Completions models, `opencode-go-messages` the
-Anthropic Messages models, `opencode-go-responses` the Responses models, and
+Anthropic Messages models, `opencode-go-responses` the Responses models
+(including Grok 4.5), and
 `opencode-zen` the pay-per-use Zen endpoint (no preselected models — curate
 the ones you want). All four are one selectable family: they share a single
 stored key, and enabling or disabling any of them toggles all of them
@@ -452,13 +460,14 @@ in code to its official endpoint.
 | OpenCode Free | `opencode-free` | `https://opencode.ai/zen/v1` | `big-pickle` and IDs ending in `-free` |
 | Kilo Free | `kilo-free` | `https://api.kilo.ai/api/gateway` | IDs ending in `:free` |
 
-Both are catalog-only and deliberately ship no checked-in model metadata: the
-provider's live `/models` response is filtered to the free subset and then added
-locally with `./bin/curate-models`. OpenCode Free curation routes
-`muse-spark-1.2-contributor-free` through its internal Responses sibling while
-keeping Ox Alpha Free (`x-preview-f-free`) and the other free IDs on Chat
-Completions; the provider remains one selection in setup and the picker. An
-existing Chat-routed copy of that one Muse model is migrated only when the
+Neither ships its free subset as checked-in metadata, with a single exception:
+**Ox Alpha** on OpenCode Free is checked in — see [Ox Alpha](#ox-alpha) below.
+Everything else comes from the provider's live `/models` response, filtered to
+the free subset and then added locally with `./bin/curate-models`. OpenCode Free
+curation routes `muse-spark-1.2-contributor-free` through its internal Responses
+sibling while keeping Ox Alpha Free (`x-preview-f-free`) and the other free IDs
+on Chat Completions; the provider remains one selection in setup and the picker.
+An existing Chat-routed copy of that one Muse model is migrated only when the
 operator explicitly runs `curate-models`; install, update, and catalog reads do
 not rewrite the user model or picker state. Zen's `/models` response publishes
 no context limits, so those two IDs are sized from OpenCode's own published
@@ -566,6 +575,7 @@ CLI session.
 
 | Picker label | Model ID |
 | --- | --- |
+| Ox Alpha (Command Code) | `commandcode/ox-alpha` |
 | DeepSeek V4 Flash (Command Code) | `commandcode/deepseek-v4-flash` |
 | DeepSeek V4 Pro (Command Code) | `commandcode/deepseek-v4-pro` |
 | GLM-5.2 (Command Code) | `commandcode/glm-5.2` |
@@ -599,6 +609,50 @@ remaining credits and its 5-hour and weekly windows from the same undocumented
 billing route the official CLI polls, and links to Command Code Studio when
 that route is unavailable.
 
+### Ox Alpha
+
+Ox Alpha is a stealth reasoning model for coding and long-horizon agentic work:
+a 1,048,576-token context window, 131,072 tokens of output, text and image
+input, and tool calling. Six of this repository's routes resell the same model,
+and it is priced at zero on all of them during the preview, so the entries carry
+a **Free** badge in the control center.
+
+| Picker label | Model ID | Needs a key |
+| --- | --- | --- |
+| Ox Alpha (OpenCode Free) | `opencode-free/ox-alpha` | no |
+| Ox Alpha (opencode Go) | `opencode-go/ox-alpha` | opencode |
+| Ox Alpha (OpenRouter) | `openrouter/ox-alpha` | OpenRouter |
+| Ox Alpha (Command Code) | `commandcode/ox-alpha` | Command Code |
+| Ox Alpha (Nous Research) | `nousresearch/ox-alpha` | Nous Portal |
+| Ox Alpha (Venice) | `venice/ox-alpha` | Venice |
+
+Reasoning effort is **low · high · max** on every route, defaulting to `max`.
+Only three rungs exist because the model always thinks and its upstream says so
+outright — anything else comes back as `400 — This model always engages in
+thinking and cannot be disabled; please use low, high, or max`. Codex has more
+rungs than that, and a Codex older than 0.143 has no `max` at all, so the router
+clamps whatever effort you pick onto the three the model accepts. Switching
+effort in the picker is safe on all six routes.
+
+The quickest route needs nothing at all:
+
+```sh
+./bin/model-router codex providers enable opencode-free
+```
+
+For the credentialed routes, store the key and enable the provider:
+
+```sh
+./bin/model-router codex provider-key venice set
+./bin/model-router codex providers enable venice
+```
+
+> **The free preview is a preview.** No lab has claimed this model, the routes
+> that serve it can narrow or withdraw it without notice, and the retention
+> terms differ per provider — OpenCode advertises zero data retention, Venice
+> anonymizes, and other resellers say less. Treat it as a way to try a model,
+> not as something to depend on.
+
 ### Meta Model API
 
 Meta's Muse Spark models speak the Responses protocol at
@@ -626,7 +680,6 @@ often for the repository to pin and live-verify individual entries:
 | Provider | Provider ID | Base URL |
 | --- | --- | --- |
 | Groq | `groq` | `https://api.groq.com/openai/v1` |
-| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` |
 | Together AI | `together` | `https://api.together.xyz/v1` |
 | Fireworks AI | `fireworks` | `https://api.fireworks.ai/inference/v1` |
 | Cerebras | `cerebras` | `https://api.cerebras.ai/v1` |
@@ -638,6 +691,28 @@ often for the repository to pin and live-verify individual entries:
 | GitHub Copilot | `github-copilot` | Account-specific GitHub Copilot endpoint |
 | Chutes | `chutes` | `https://llm.chutes.ai/v1` |
 | OrcaRouter | `orca` | `https://api.orcarouter.ai/v1` |
+| NanoGPT | `nano-gpt` | `https://nano-gpt.com/api/v1` |
+
+`devin-cli` is the OAuth exception to this API-key table. After `devin auth
+login`, the Control Center and `./bin/curate-models devin-cli` read the model
+configuration available to that account through the installed Devin CLI; the
+provider still ships no preselected models.
+
+Three more providers work the same way but arrive with the single checked-in
+[Ox Alpha](#ox-alpha) entry, so their picker is not empty once a key is stored:
+
+| Provider | Provider ID | Base URL | Key from |
+| --- | --- | --- | --- |
+| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) |
+| Venice | `venice` | `https://api.venice.ai/api/v1` | [venice.ai/settings/api](https://venice.ai/settings/api) |
+| Nous Research (Hermes) | `nousresearch` | `https://inference-api.nousresearch.com/v1` | [portal.nousresearch.com](https://portal.nousresearch.com) |
+
+Venice API access is an entitlement, not just a key: a free Venice account has
+none. A Pro subscription (the low-rate-limit Explorer tier), a funded USD
+balance, or staked VVV that grants VCU is what makes the key usable, and the
+router prints that requirement wherever you connect the provider rather than
+letting it arrive as a 403 inside Codex. Nous Research keys are Nous Portal API
+keys and authenticate the same endpoint the Hermes agent uses.
 
 Add a key, then pick the models you want from the provider's live catalog:
 
@@ -753,6 +828,20 @@ the next external-model request sees the change without restarting Codex or the
 router. The equivalent CLI commands are `./bin/control tool-result-aging on`,
 `off`, and `status`.
 
+When the estimated request reaches 70% of that model's auto-compact budget, the
+same switch automatically enters **token maxxing** for the turn. It applies a
+small deterministic output shaper inspired by
+[RTK](https://github.com/rtk-ai/rtk): terminal progress rewrites, exact repeated
+lines, blank runs, and deep boilerplate are collapsed while error-bearing lines
+stay visible. The newest-result frontier remains intact below that pressure
+threshold. Under pressure, every shaped result carries its original byte count,
+SHA-256 digest, and an exact rerun instruction, and the router adds a terse
+execution overlay inspired by
+[Caveman](https://github.com/JuliusBrussee/caveman) so the model favors targeted
+reads, bounded command output, and concise prose. Routed compaction requests use
+the same dense shaping because they are already at the context boundary. No
+second toggle or restart is required.
+
 Native OpenAI traffic is unchanged by default. `./bin/control
 tool-result-aging native on` extends the same compaction to native GPT models;
 `native off` restores the default. It is opt-in because it changes what is sent
@@ -811,8 +900,10 @@ before and after aging; this is an estimate and spends no provider quota.
 `usage-events.jsonl` — measured turns rather than an estimate. For a
 live check, leave the setting on and inspect `usage-events.jsonl` after a routed
 turn; events that compacted history include `toolResultsAged` and
-`toolResultBytesSaved`. Those counters measure serialized context bytes, while
-provider-billed token counts remain the authoritative cost measurement.
+`toolResultBytesSaved`. Pressure-shaped turns additionally include
+`toolResultsShaped` and `toolResultShapeBytesSaved`. Those counters measure
+serialized context bytes, while provider-billed token counts remain the
+authoritative cost measurement.
 
 For a reproducible provider-reported A/B, see
 [`docs/tool-result-aging-benchmark.md`](docs/tool-result-aging-benchmark.md).
@@ -1443,20 +1534,31 @@ comments, and your other stored keys are left exactly as they were —
 A settings file this build cannot read unambiguously is refused with the file
 untouched rather than rewritten on a guess.
 
-**Native GPT models publish while this machine has a usable Codex session.**
-They are authorized by a ChatGPT session and a harness request carries none of
-its own, so the router falls back to the session Codex is already signed in with
-here — you are logged in on this machine, and a client running as the same user
-should not have to log in again. They are withheld the moment that session is
-missing or expired, so the picker never offers a turn that would 401. If they
-disappear, open Codex once to renew it; `./bin/model-router doctor` says so too.
+**Native GPT models require one explicit local authorization.** They are
+authorized by a ChatGPT session and a harness request carries none of its own.
+Sign in through the official Codex browser flow, then authorize this shared
+router plane once:
+
+```sh
+codex login
+./bin/model-router codex chatgpt-session enable
+```
+
+DeepSeek Harness, Gemini CLI, and future clients installed for this same OS
+user then reuse that one authorization over the loopback; there is no login per
+harness and the marker stores no credential. Native models are withheld until
+both the authorization and a usable Codex session exist, and disappear again
+when the session is missing or expired. Run `codex login` to renew the session;
+the one-time authorization remains in place.
 
 It is a fallback and never an override: a request that presents its own
-credential is relayed untouched, so nothing about a Codex turn changes. Worth
-knowing before leaving it on — it widens what the caller key reaches, from the
-API-key providers to your ChatGPT subscription as well. Set
-`CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` to turn it off, and the harness
-publishes routed models only.
+credential is relayed untouched, so nothing about a Codex turn changes. The
+authorization widens what the local caller key reaches, from API-key providers
+to your ChatGPT subscription as well. Revoke it everywhere with
+`./bin/model-router codex chatgpt-session disable`; Codex stays signed in and
+keeps its own native models. Headless operators may set
+`CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` as an explicit opt-in (`0` always
+forces it off).
 
 **Subagents.** A child spawned by `dsh-tool-subagent` with no model of its own
 inherits the default model selection, so it is already routed once this route
@@ -1514,31 +1616,31 @@ fabricated vector would be worse than an error. `:countTokens` is answered from
 a byte-count estimate rather than by spending a real turn upstream.
 
 **Native GPT models** publish here under the same rule as the harness, described
-above: while this machine has a usable Codex session, and withheld the moment it
-does not.
+above: after the one-time shared-plane authorization, while this machine has a
+usable Codex session, and withheld the moment either condition stops holding.
 
-## macOS tray control panel
+## macOS native tray host and Control Center
 
-On macOS, build and open the native menu-bar control panel with:
+On macOS, build and install the unified app with:
 
 ```sh
 ./bin/model-router-tray
 ```
 
-It shows Codex health, detailed usage for the active provider, a seven-day
-overview of every configured or previously used provider, and auto-applied
-provider controls in a native glass macOS interface. On first launch the app
-registers itself as a login item, so it reopens automatically after a reboot;
-the Settings tab's **Start at login** toggle or System Settings › Login Items
-turns that off, and the choice is never re-applied behind your back. A
-**Show tray** setting can additionally tie every tray surface to the Codex
-and ChatGPT desktop apps, appearing when they launch and hiding when they
-quit. In **With Codex** mode the endpoint starts with either app and stops only
-after both remain closed for 30 seconds and active requests have drained. A
-periodic process recheck backs up workspace notifications so a missed launch
-cannot strand Codex without its endpoint. **Always** keeps it continuously on.
-See the [macOS tray guide](docs/MACOS-TRAY.md) for behavior and
-rebuild notes.
+`Codex Router.app` contains the Swift-native menu-bar host and the embedded
+Electron Control Center window. Opening the app shows the Control Center;
+closing that window leaves the native tray running so it can be reopened. A
+per-user launchd agent starts the host at login and restarts abnormal exits.
+There is one supervisor and one installed app in `~/Applications`.
+
+The native panel shows Codex health, detailed provider usage, and provider
+controls. Its **Show tray** setting can tie the native tray surfaces to Codex
+and ChatGPT, while a user-opened Control Center window remains available. In
+**With Codex** mode the endpoint starts with either app and stops only after
+both remain closed for 30 seconds and active requests have drained. A periodic
+process recheck backs up workspace notifications; **Always** keeps the endpoint
+continuously on. See the [macOS tray guide](docs/MACOS-TRAY.md) for behavior
+and rebuild notes.
 
 The app can also place a Dynamic-Island-style overlay at the top center of the
 active display. It follows the provider handling the latest request, reveals
@@ -1547,12 +1649,14 @@ under **Dynamic Island** in the tray Settings. The menu-bar panel is the
 primary surface for the all-provider overview and configuration, and stays
 available whether or not the overlay is on.
 
-## Windows and Linux tray control panel
+## Unified desktop app
 
-Windows and Linux use the shared Tauri tray companion in `apps/desktop`. It
-provides the same connected-provider filtering, normalized quota cards, daily
-token graph, secure provider setup, and animated activity status as the macOS
-surface.
+`Codex Router.app` on macOS combines the Swift-native menu-bar host with an
+embedded Electron Control Center. launchd supervises the host, and opening the
+app or choosing **Control Center** shows the embedded window. Windows and Linux
+package that same Control Center as one Electron process with the native OS
+tray; closing its window leaves the tray running, and clicking the tray restores
+the window.
 
 ```sh
 # Linux
@@ -1563,22 +1667,24 @@ surface.
 # Windows PowerShell -- build, launch, and start at logon
 .\install.ps1 -CheckoutInstall -WithTray
 
-# or build and launch it by hand
-.\scripts\build-desktop-tray.ps1 -BinaryOnly
-Start-Process .\apps\desktop\src-tauri\target\release\codex-router-desktop.exe
+# or build and register it by hand
+.\scripts\build-electron-companion.ps1
+.\codex-router.ps1 tray install
 ```
 
-Or skip the build entirely: every release attaches
-`codex-router-tray-<version>-windows-x64.exe`, and every CI run publishes the
-same binary as an artifact. Windows already ships the WebView2 runtime it
-needs.
+Tagged releases provide unsigned Windows and Linux tester packages for this
+unified application family: `model-router-<version>-windows-x64.exe` and
+`model-router-<version>-linux-x64.tar.gz` (containing the executable AppImage).
+They are frontends, so install the matching Codex Router version first. The
+universal macOS bundle remains an ad-hoc-signed CI artifact until Developer ID
+signing and notarization are available; it is not attached to public releases.
 
 Windows 11 hides new tray icons in the `^` overflow next to the clock; drag the
 icon onto the taskbar to pin it.
 
-Windows and Linux on X11 receive the floating top-center activity pill. Linux
-on Wayland uses the tray panel without the pill because the compositor owns
-absolute window placement. See the
+On Linux, a tray-only launch stays windowless only when the desktop reports a
+registered StatusNotifier host. Otherwise it keeps a visible Control Center
+window so the process cannot disappear without a recoverable surface. See the
 [Windows and Linux tray guide](docs/DESKTOP-TRAY.md) for prerequisites,
 packaging, and the platform behavior matrix.
 

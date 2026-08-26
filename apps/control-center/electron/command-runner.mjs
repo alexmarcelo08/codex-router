@@ -19,13 +19,17 @@ const SECRET_WORD = /(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password
 const APP_CONTRACT_LIMIT = 1024 * 1024;
 const WINDOWS_EXECUTABLE_EXTENSIONS = [".exe", ".com", ".cmd", ".bat"];
 
-function pathEntries(environment, platform = process.platform) {
+function pathEntries(
+  environment,
+  platform = process.platform,
+  hostExecPath = process.execPath,
+) {
   const home = os.homedir();
   const configuredNode = environment.CODEX_ROUTER_NODE_BIN;
   const candidates = [
     ...(configuredNode && path.isAbsolute(configuredNode) ? [path.dirname(configuredNode)] : []),
     ...String(environment.PATH || "").split(path.delimiter),
-    ...(path.isAbsolute(process.execPath) ? [path.dirname(process.execPath)] : []),
+    ...(path.isAbsolute(hostExecPath) ? [path.dirname(hostExecPath)] : []),
     // GUI applications on macOS and Linux are commonly launched without the
     // login-shell PATH. Keep these explicit locations in the same search set
     // the Control Center uses when reporting an installed runtime.
@@ -69,7 +73,12 @@ function runnableExecutable(candidate, platform = process.platform) {
   }
 }
 
-function discoverExecutable(environment, executable, platform = process.platform) {
+function discoverExecutable(
+  environment,
+  executable,
+  platform = process.platform,
+  hostExecPath = process.execPath,
+) {
   const configured = executable === "node"
     ? runnableExecutable(environment.CODEX_ROUTER_NODE_BIN, platform)
     : undefined;
@@ -77,7 +86,7 @@ function discoverExecutable(environment, executable, platform = process.platform
   const names = platform === "win32" && !path.extname(executable)
     ? WINDOWS_EXECUTABLE_EXTENSIONS.map((extension) => `${executable}${extension}`)
     : [executable];
-  for (const directory of pathEntries(environment, platform)) {
+  for (const directory of pathEntries(environment, platform, hostExecPath)) {
     for (const name of names) {
       const found = runnableExecutable(path.join(directory, name), platform);
       if (found) return found;
@@ -95,9 +104,12 @@ function discoverExecutable(environment, executable, platform = process.platform
  */
 export function runtimeEnvironment(
   environment = process.env,
-  { platform = process.platform } = {},
+  {
+    platform = process.platform,
+    hostExecPath = process.execPath,
+  } = {},
 ) {
-  const node = discoverExecutable(environment, "node", platform);
+  const node = discoverExecutable(environment, "node", platform, hostExecPath);
   if (!node) {
     // Do not hand an invalid explicit path to the installer. It would look
     // deliberate in the generated service definition and fail on every boot.
@@ -105,7 +117,7 @@ export function runtimeEnvironment(
     delete cleaned.CODEX_ROUTER_NODE_BIN;
     return cleaned;
   }
-  const npm = discoverExecutable(environment, "npm", platform);
+  const npm = discoverExecutable(environment, "npm", platform, hostExecPath);
   const runtimeDirectories = [
     path.dirname(node),
     ...(npm ? [path.dirname(npm)] : []),
@@ -126,6 +138,49 @@ export function runtimeEnvironment(
     // is the value the installer trusts before any PATH lookup.
     CODEX_ROUTER_NODE_BIN: node,
   };
+}
+
+function pathIsInside(candidate, directory, platform = process.platform) {
+  const pathApi = platform === "win32" ? path.win32 : path;
+  const relative = pathApi.relative(pathApi.resolve(directory), pathApi.resolve(candidate));
+  return relative === "" || (!relative.startsWith(`..${pathApi.sep}`) && !pathApi.isAbsolute(relative));
+}
+
+// Detached tray maintenance outlives the packaged UI and may replace its
+// directory. On
+// POSIX the mapped Electron executable can be unlinked safely; Windows locks
+// it until every process exits, so running `control tray refresh` through that
+// same executable makes the updater wait on its own package forever. The
+// installer already requires and records a real Node runtime: use that exact
+// external node.exe on Windows, and refuse rather than falling back to the
+// packaged Electron binary.
+export function detachedControlRuntime(
+  environment = process.env,
+  {
+    platform = process.platform,
+    execPath = process.execPath,
+    electron = Boolean(process.versions.electron),
+  } = {},
+) {
+  const childEnvironment = runtimeEnvironment(environment, {
+    platform,
+    hostExecPath: execPath,
+  });
+  if (platform === "win32" && electron) {
+    const executable = discoverExecutable(childEnvironment, "node", platform, execPath);
+    const packageDirectory = path.win32.dirname(execPath);
+    if (
+      !executable
+      || path.win32.basename(executable).toLowerCase() !== "node.exe"
+      || pathIsInside(executable, packageDirectory, platform)
+    ) {
+      throw new Error("A trusted external node.exe is required to refresh the Windows Control Center.");
+    }
+    delete childEnvironment.ELECTRON_RUN_AS_NODE;
+    return { executable, environment: childEnvironment };
+  }
+  if (electron) childEnvironment.ELECTRON_RUN_AS_NODE = "1";
+  return { executable: execPath, environment: childEnvironment };
 }
 
 function validSourceRoot(candidate) {
@@ -213,7 +268,17 @@ function recordedInstallManifest() {
       : typeof rawPackageManager === "string" && /^[a-z0-9][a-z0-9._-]{0,80}$/i.test(rawPackageManager)
         ? rawPackageManager
         : undefined;
-    return { sourceRoot, packageManager };
+    // Only the proxy opt-in is read back, never the addresses: restoring an
+    // address the environment does not name is `inheritedProxyEnvironment`'s
+    // decision to defer, and AGENTS.md says not to widen that trigger here.
+    const recordedProxy = manifest.current?.proxyEnvironment;
+    const proxyOptIn = recordedProxy
+      && typeof recordedProxy === "object"
+      && !Array.isArray(recordedProxy)
+      && recordedProxy.NODE_USE_ENV_PROXY === "1"
+      ? "1"
+      : undefined;
+    return { sourceRoot, packageManager, proxyOptIn };
   } catch {
     return undefined;
   }
@@ -230,6 +295,7 @@ function companionSourceRoots() {
   }
   if (process.platform === "darwin") {
     candidates.push(
+      path.join(os.homedir(), "Applications", "Codex Router.app", "Contents", "Resources", "router-root"),
       path.join(os.homedir(), "Applications", "Model Router.app", "Contents", "Resources", "router-root"),
     );
   }
@@ -400,18 +466,53 @@ async function terminateProcessTree(child) {
  * Run one of the fixed router commands. `args` are always an argv array and
  * never pass through a shell. `stdin` is used solely for API credentials.
  */
-function runEntrypoint(entry, args = [], { stdin, timeoutMs = DEFAULT_TIMEOUT_MS, maxOutputBytes = MAX_OUTPUT_BYTES, allowNonZero = false } = {}) {
+function runEntrypoint(entry, args = [], {
+  stdin,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  maxOutputBytes = MAX_OUTPUT_BYTES,
+  allowNonZero = false,
+  environmentOverrides = {},
+} = {}) {
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) {
     throw new TypeError("Router command arguments must be strings.");
   }
+  if (
+    !environmentOverrides
+    || typeof environmentOverrides !== "object"
+    || Array.isArray(environmentOverrides)
+    || Object.entries(environmentOverrides).some(([key, value]) => (
+      !/^[A-Z][A-Z0-9_]*$/.test(key)
+      || typeof value !== "string"
+      || value.includes("\0")
+    ))
+  ) throw new TypeError("Router command environment overrides must be string values.");
   const sourceRoot = discoverSourceRoot();
   const childEnvironment = {
     ...runtimeEnvironment(process.env),
     MODEL_ROUTER_SOURCE_ROOT: sourceRoot,
     MODEL_ROUTER_TARGET: "codex",
     ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+    ...environmentOverrides,
   };
   const recordedInstall = recordedInstallManifest();
+  // The address and the permission to use it are separate answers, and this
+  // app is launched by the desktop session rather than by the service: it
+  // inherits HTTP_PROXY from the login environment but nothing that says Node
+  // may use it. A router child then dials a proxied host directly and reports
+  // the connect timeout as the provider failing -- which is how a reachable
+  // Venice catalog came back as "fetch failed". The service definition already
+  // resolves this the same way; see serviceProxyEnvironment().
+  if (
+    recordedInstall?.sourceRoot === sourceRoot
+    && recordedInstall.proxyOptIn === "1"
+    && childEnvironment.NODE_USE_ENV_PROXY === undefined
+    && (
+      childEnvironment.HTTP_PROXY ?? childEnvironment.http_proxy
+      ?? childEnvironment.HTTPS_PROXY ?? childEnvironment.https_proxy
+    )
+  ) {
+    childEnvironment.NODE_USE_ENV_PROXY = "1";
+  }
   if (recordedInstall?.sourceRoot === sourceRoot && recordedInstall.packageManager !== undefined) {
     if (recordedInstall.packageManager === null) delete childEnvironment.CODEX_ROUTER_PACKAGE_MANAGER;
     else childEnvironment.CODEX_ROUTER_PACKAGE_MANAGER = recordedInstall.packageManager;
@@ -484,6 +585,56 @@ function runEntrypoint(entry, args = [], { stdin, timeoutMs = DEFAULT_TIMEOUT_MS
         child.stdin.end(stdin);
       }
     }
+  });
+}
+
+export function runControlDetached(
+  args = [],
+  {
+    sourceRoot = discoverSourceRoot(),
+    runtime = detachedControlRuntime(),
+    spawnImpl = spawn,
+  } = {},
+) {
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) {
+    throw new TypeError("Router command arguments must be strings.");
+  }
+  const childEnvironment = {
+    ...runtime.environment,
+    MODEL_ROUTER_SOURCE_ROOT: sourceRoot,
+    MODEL_ROUTER_TARGET: "codex",
+  };
+  return new Promise((resolve, reject) => {
+    const child = spawnImpl(
+      runtime.executable,
+      [path.join(sourceRoot, "src", "control.mjs"), ...args],
+      {
+        cwd: sourceRoot,
+        detached: true,
+        env: childEnvironment,
+        shell: false,
+        windowsHide: true,
+        stdio: "ignore",
+      },
+    );
+    let settled = false;
+    // `spawn()` returning a ChildProcess is not proof that the OS accepted the
+    // executable. Resolve only at Node's spawn event; a missing or denied
+    // runtime emits error first and must reach the UI as a failed action.
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(safeFailure(error?.message || "Detached router command could not start.")));
+    });
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      // Tray maintenance may atomically replace this very packaged app. With
+      // no pipe owned by the UI and a detached process group, it remains alive
+      // after the parent accepts the updater's graceful quit request.
+      child.unref();
+      resolve(child.pid);
+    });
   });
 }
 

@@ -105,7 +105,7 @@ test("codex probe reports enabled models", () => {
   assert.ok(deepseek.length > 0 && deepseek.every((m) => m.enabled));
 });
 
-test("desktop snapshots expose Ox Alpha Free instead of its opaque OpenCode id", () => {
+test("desktop snapshots expose the canonical Ox Alpha route instead of its opaque OpenCode id", () => {
   const stored = {
     ...userModelEntry({
       providerId: "opencode-free",
@@ -118,9 +118,9 @@ test("desktop snapshots expose Ox Alpha Free instead of its opaque OpenCode id",
     displayName: "x-preview-f-free (curated)",
   };
   const slice = probe("codex", ["opencode-free"], [], { userModels: [stored] });
-  const model = slice.models.find((entry) => entry.slug === "opencode-free/x-preview-f-free");
-  assert.equal(model.displayName, "Ox Alpha Free");
-  assert.equal(model.slug, "opencode-free/x-preview-f-free");
+  const model = slice.models.find((entry) => entry.slug === "opencode-free/ox-alpha");
+  assert.equal(model.displayName, "Ox Alpha (OpenCode Free)");
+  assert.equal(model.slug, "opencode-free/ox-alpha");
   assert.equal(model.provider, "opencode-free");
   assert.equal(model.enabled, true);
 });
@@ -319,6 +319,9 @@ test("control exposes subagent and picker settings without credentials", () => {
   try {
     const env = {
       ...process.env,
+      // Without this the command republishes into the operator's real
+      // ~/.codex/agents and clears every routed subagent definition there.
+      CODEX_HOME: stateDir,
       MODEL_ROUTER_TARGET: "codex",
       MODEL_ROUTER_STATE_DIR: stateDir,
     };
@@ -350,6 +353,9 @@ test("control refuses to enable a repository-certified v1 model as a v2 subagent
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "control-subagent-v1-"));
   const env = {
     ...process.env,
+    // Without this the command republishes into the operator's real
+    // ~/.codex/agents and clears every routed subagent definition there.
+    CODEX_HOME: stateDir,
     MODEL_ROUTER_TARGET: "codex",
     MODEL_ROUTER_STATE_DIR: stateDir,
   };
@@ -463,6 +469,9 @@ test("control can test an uncertified route despite its conservative merged-cata
   const slug = "deepseek/deepseek-v4-flash";
   const env = {
     ...process.env,
+    // Without this the command republishes into the operator's real
+    // ~/.codex/agents and clears every routed subagent definition there.
+    CODEX_HOME: stateDir,
     MODEL_ROUTER_TARGET: "codex",
     MODEL_ROUTER_STATE_DIR: stateDir,
   };
@@ -495,6 +504,9 @@ test("control toggles tool-result aging without a router restart", () => {
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "control-tool-result-aging-"));
   const env = {
     ...process.env,
+    // Without this the command republishes into the operator's real
+    // ~/.codex/agents and clears every routed subagent definition there.
+    CODEX_HOME: stateDir,
     MODEL_ROUTER_TARGET: "codex",
     MODEL_ROUTER_STATE_DIR: stateDir,
   };
@@ -942,6 +954,16 @@ test("aggregate overview covers every target", () => {
 test("aggregate overview exposes the router-owned catalog separately from client probes", () => {
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "control-catalog-"));
   try {
+    const userModel = userModelEntry({
+      providerId: "deepseek",
+      upstreamId: "operator-curated-preview",
+      priority: 1,
+    });
+    writeFileSync(
+      path.join(stateDir, "user-models.json"),
+      `${JSON.stringify({ version: 1, models: [userModel] })}\n`,
+      { mode: 0o600 },
+    );
     const output = execFileSync(process.execPath, [path.join(root, "src", "control.mjs"), "--json"], {
       cwd: root,
       encoding: "utf8",
@@ -954,9 +976,39 @@ test("aggregate overview exposes the router-owned catalog separately from client
     const parsed = JSON.parse(output);
     assert.equal(parsed.catalog.source, "codex-router");
     assert.ok(Array.isArray(parsed.catalog.models));
+    assert.ok(Array.isArray(parsed.catalog.knownModels));
     assert.ok(Array.isArray(parsed.catalog.enabledProviders));
     assert.ok(Array.isArray(parsed.catalog.picker.hidden));
     assert.ok(Array.isArray(parsed.catalog.picker.visible));
+    assert.equal(
+      parsed.catalog.knownModels.some((model) => model.slug === userModel.slug),
+      false,
+      "operator-curated models must not be described as checked-in research routes",
+    );
+    const oxAlphaRoutes = parsed.catalog.knownModels
+      .filter((model) => model.displayName.startsWith("Ox Alpha"))
+      .map((model) => [model.slug, model.available])
+      .sort(([left], [right]) => left.localeCompare(right));
+    assert.deepEqual(oxAlphaRoutes, [
+      ["commandcode/ox-alpha", false],
+      ["nousresearch/ox-alpha", false],
+      ["opencode-free/ox-alpha", true],
+      ["opencode-go/ox-alpha", false],
+      ["openrouter/ox-alpha", false],
+      ["venice/ox-alpha", false],
+    ]);
+    assert.deepEqual(
+      parsed.catalog.models
+        .filter((model) => model.slug.endsWith("/ox-alpha"))
+        .map((model) => model.slug),
+      ["opencode-free/ox-alpha"],
+      "unavailable research routes must not enter the routable catalog",
+    );
+    const activeOxAlpha = parsed.catalog.models.find(
+      (model) => model.slug === "opencode-free/ox-alpha",
+    );
+    assert.equal(activeOxAlpha.contextWindow, 1_048_576);
+    assert.deepEqual(activeOxAlpha.inputModalities, ["text", "image"]);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
@@ -992,11 +1044,26 @@ test("the tray usage advertises rebuild alongside the supervised actions", () =>
           },
         ),
       (error) => {
-        assert.match(String(error.stderr), /Usage: control tray enable\|disable\|status\|restart\|rebuild/);
+        assert.match(String(error.stderr), /Usage: control tray enable\|disable\|status\|restart\|refresh\|rebuild/);
         return true;
       },
     );
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
+});
+
+test("Windows tray enable uses the durable package and task transaction", () => {
+  const source = readFileSync(path.join(root, "src", "control.mjs"), "utf8");
+  const tray = source.slice(source.indexOf("function handleTray("), source.indexOf("async function handleNativeRedirect("));
+  assert.match(tray, /value === "enable" && process\.platform === "win32"/);
+  assert.match(
+    tray,
+    /powershell\.exe[\s\S]*codex-router\.ps1[\s\S]*"tray"[\s\S]*"install"[\s\S]*"--preserve-window"/,
+  );
+  assert.ok(
+    tray.indexOf('path.join(REPO_ROOT, "codex-router.ps1")')
+      < tray.indexOf('path.join(REPO_ROOT, "src", "tray-service.mjs"), subcommand'),
+    "Windows enable must choose the transaction before the raw supervisor fallback",
+  );
 });

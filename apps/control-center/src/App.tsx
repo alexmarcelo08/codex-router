@@ -18,7 +18,7 @@ import {
   Settings,
   Sun,
 } from "lucide-react";
-import routerIcon from "../../desktop/src-tauri/icons/32x32.png";
+import routerIcon from "../assets/32x32.png";
 import { Badge, Button, InlineNotice, LoadingState } from "./components";
 import { classNames } from "./lib";
 import { ContextPage } from "./pages/ContextPage";
@@ -85,7 +85,7 @@ function initialView(): ViewId {
 
 export default function App() {
   const api = window.routerControl;
-  const nativeTitlebar = api?.platform === "darwin";
+  const nativeTitlebar = Boolean(api);
   const [view, setView] = useState<ViewId>(initialView);
   const [modelFocusRequest, setModelFocusRequest] = useState<ModelViewFocusRequest>();
   const modelFocusSequence = useRef(0);
@@ -105,9 +105,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [operation, setOperation] = useState<OperationEvent | null>(null);
-  const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
+  const [toast, setToast] = useState<{ tone: "neutral" | "success" | "danger"; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const downloadPollInFlight = useRef(false);
+  const healthPollInFlight = useRef(false);
   const previousActivityState = useRef<string | undefined>(undefined);
 
   const target = snapshot?.targets.codex;
@@ -117,11 +118,14 @@ export default function App() {
   const downloadActive = localDownloadActive || mlxOperationActive || visionDownloadActive;
 
   const refreshHealth = useCallback(async () => {
-    if (!api) return;
+    if (!api || healthPollInFlight.current || document.visibilityState !== "visible") return;
+    healthPollInFlight.current = true;
     try {
       setHealth(await api.getHealth());
     } catch (error) {
       setHealth({ ok: false, error: readableError(error), activity: { state: "offline", active: [], activeCount: 0 } });
+    } finally {
+      healthPollInFlight.current = false;
     }
   }, [api]);
 
@@ -269,13 +273,32 @@ export default function App() {
   const runAction = useCallback(async (label: string, action: () => Promise<unknown>) => {
     setOperation({ action: label, status: "started", message: label });
     try {
-      await action();
+      const result = await action();
+      if (
+        result !== null
+        && typeof result === "object"
+        && (result as { accepted?: unknown }).accepted === true
+      ) {
+        // Detached tray work can outlive (and intentionally close) this app.
+        // Spawn acceptance is not scheduler/build success, so never render the
+        // generic "completed" state for it; the supervisor status remains the
+        // source of truth after the replacement app opens.
+        const message = `${label} started.`;
+        setToast({ tone: "neutral", message });
+        setOperation({ action: label, status: "started", message });
+        return;
+      }
       setToast({ tone: "success", message: `${label} completed.` });
       await Promise.allSettled([refreshCore(), refreshUsage()]);
     } catch (error) {
       const message = readableError(error);
       setToast({ tone: "danger", message });
       setOperation({ action: label, status: "failed", message });
+      // Some control transactions persist their safe local decision before
+      // republishing installed client catalogs. A later publication failure
+      // rejects the command even though the durable state changed, so reconcile
+      // immediately instead of displaying the opposite consent for five minutes.
+      await Promise.allSettled([refreshCore(), refreshUsage()]);
       return;
     }
     setOperation({ action: label, status: "completed", message: `${label} completed.` });
@@ -328,14 +351,21 @@ export default function App() {
       case "local": return <LocalPage {...shared} operation={operation} />;
       case "harness": return <HarnessPage {...shared} />;
       case "context": return <ContextPage {...shared} />;
-      case "settings": return <SettingsPage {...shared} health={health} presence={presence} theme={theme} onTheme={setTheme} language={language} onLanguage={setLanguage} t={t} />;
+      case "settings": return <SettingsPage {...shared} health={health} presence={presence} chatgptSession={snapshot?.chatgptSession} theme={theme} onTheme={setTheme} language={language} onLanguage={setLanguage} t={t} />;
     }
   })();
 
   return (
-    <div className={classNames("app-shell", nativeTitlebar && "native-titlebar", !sidebarOpen && "sidebar-collapsed")}>
+    <div className={classNames("app-shell", nativeTitlebar && "native-titlebar", api && `native-titlebar-${api.platform}`, !sidebarOpen && "sidebar-collapsed")}>
       <aside className="app-sidebar" aria-label="Codex Router sidebar" inert={sidebarSearchOpen ? true : undefined}>
         <header className="sidebar-window-row">
+          {api && api.platform !== "darwin" && sidebarOpen ? (
+            <div className="traffic-lights">
+              <button type="button" className="traffic-light traffic-light-close" aria-label="Close window" onClick={() => void api.closeWindow()} />
+              <button type="button" className="traffic-light traffic-light-minimize" aria-label="Minimize window" onClick={() => void api.minimizeWindow()} />
+              <button type="button" className="traffic-light traffic-light-maximize" aria-label="Maximize or restore window" onClick={() => void api.toggleMaximizeWindow()} />
+            </div>
+          ) : null}
           <button className="sidebar-toggle" type="button" aria-label="Collapse sidebar" onClick={() => setSidebarOpen(false)}><PanelLeftClose aria-hidden size={15} strokeWidth={1.7} /></button>
           <button className="sidebar-toggle" type="button" aria-label="Go back" disabled={historyIndex === 0} onClick={() => moveHistory(-1)}><ArrowLeft aria-hidden size={15} strokeWidth={1.7} /></button>
           <button className="sidebar-toggle" type="button" aria-label="Go forward" disabled={historyIndex >= viewHistory.length - 1} onClick={() => moveHistory(1)}><ArrowRight aria-hidden size={15} strokeWidth={1.7} /></button>
@@ -367,6 +397,13 @@ export default function App() {
 
       <main className="app-main" inert={sidebarSearchOpen ? true : undefined}>
         <div className="titlebar">
+          {api && api.platform !== "darwin" && !sidebarOpen ? (
+            <div className="traffic-lights">
+              <button type="button" className="traffic-light traffic-light-close" aria-label="Close window" onClick={() => void api.closeWindow()} />
+              <button type="button" className="traffic-light traffic-light-minimize" aria-label="Minimize window" onClick={() => void api.minimizeWindow()} />
+              <button type="button" className="traffic-light traffic-light-maximize" aria-label="Maximize or restore window" onClick={() => void api.toggleMaximizeWindow()} />
+            </div>
+          ) : null}
           {!sidebarOpen ? <button className="titlebar-toggle" type="button" aria-label="Expand sidebar" onClick={() => setSidebarOpen(true)}><PanelLeftOpen aria-hidden size={15} strokeWidth={1.7} /></button> : null}
           <div className="title-tabs"><strong>{activeMeta.label}</strong><span>Overview</span></div>
           <div className="titlebar-spacer" />
@@ -388,7 +425,7 @@ export default function App() {
         />
       ) : null}
 
-      {toast ? <div className={classNames("toast", `toast-${toast.tone}`)} role="status">{toast.tone === "success" ? <Badge tone="success">Done</Badge> : <Badge tone="danger">Error</Badge>}<span>{toast.message}</span></div> : null}
+      {toast ? <div className={classNames("toast", `toast-${toast.tone}`)} role="status">{toast.tone === "success" ? <Badge tone="success">Done</Badge> : toast.tone === "danger" ? <Badge tone="danger">Error</Badge> : <Badge tone="neutral">Started</Badge>}<span>{toast.message}</span></div> : null}
     </div>
   );
 }

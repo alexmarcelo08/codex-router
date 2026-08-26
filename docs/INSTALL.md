@@ -75,12 +75,15 @@ menu bar app, or the Windows/Linux tray). `--with-tray` installs it without
 asking, `--no-tray` never offers it, and automatic mode skips it. On Windows
 the same choice is `-WithTray` / `-NoTray`.
 
-On macOS the app bundle is placed in `~/Applications` and needs the Swift
-toolchain; a missing toolchain skips the step with guidance instead of failing
-setup. On Windows the Tauri companion is built with Rust and registered as a
-`Codex Router Tray` logon task so it returns after a reboot; a missing Rust
-toolchain skips the step the same way. You can still build it by hand with
-`scripts/build-desktop-tray.ps1`.
+On macOS one `Codex Router.app` bundle is placed in `~/Applications`. It keeps
+the Swift-native menu-bar tray and embeds the Electron Control Center, so the
+build needs the Swift toolchain plus the Node runtime the router already
+requires; a missing toolchain skips the step with guidance instead of failing
+setup. Opening the app shows the Control Center, while a supervised login start
+keeps only the native tray visible. On Windows the packaged Electron Control
+Center owns both the native tray and the full window and is registered as the
+single `Codex Router Tray` logon task. Linux uses the same packaged Control
+Center and native Electron tray. Neither platform requires Rust.
 Guided setup walks through numbered steps: a provider list you toggle by
 number (`a` selects all, `n` clears, Enter continues) with a live
 ready/needs-key/needs-sign-in status per provider, credential onboarding for
@@ -339,7 +342,7 @@ The full lifecycle works in this state:
 ./bin/model-router codex status
 ./bin/model-router codex doctor    # exits 0; idle state reports as warnings
 ./bin/model-router codex stop
-./bin/model-router codex start     # foreground; the service restarts it otherwise
+./bin/model-router codex start     # starts the background service again
 ./bin/model-router codex uninstall
 ```
 

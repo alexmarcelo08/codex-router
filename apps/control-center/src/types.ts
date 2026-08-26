@@ -35,6 +35,18 @@ export interface RouterModel {
   autoCompact?: number;
   inputModalities?: string[];
   isFree?: boolean;
+  /** False only for a checked-in research route that is not currently routable. */
+  available?: boolean;
+}
+
+export interface RouterKnownModel {
+  slug: string;
+  displayName: string;
+  provider: string;
+  available: boolean;
+  contextWindow?: number;
+  inputModalities?: string[];
+  isFree?: boolean;
 }
 
 export interface SubagentSettings {
@@ -181,6 +193,7 @@ export interface ToolResultAgingStats {
   evaluatedRequests?: number;
   largestResultBytes?: number;
   resultsAged?: number;
+  resultsShaped?: number;
   bytesSaved?: number;
   estimatedTokensSaved?: number;
   firstAt?: string;
@@ -230,6 +243,15 @@ export interface RouterSnapshot {
   targets: { codex?: RouterTarget; [target: string]: RouterTarget | undefined };
   /** The router-owned model policy, independent of any client adapter. */
   catalog?: RouterCatalogSnapshot;
+  /** Safe consent/login projection. Never contains token, account, or path data. */
+  chatgptSession?: ChatGptSessionStatus;
+}
+
+export interface ChatGptSessionStatus {
+  sharing: "enabled" | "disabled";
+  session: "usable" | "expired" | "unavailable";
+  present: boolean;
+  expiresInHours?: number;
 }
 
 export interface RouterCatalogSnapshot {
@@ -237,6 +259,8 @@ export interface RouterCatalogSnapshot {
   configured: boolean;
   enabledProviders: string[];
   models: RouterModel[];
+  /** Safe checked-in inventory; never implies that a route is publishable. */
+  knownModels?: RouterKnownModel[];
   picker: { hidden: string[]; visible?: string[]; hasExplicitVisibility?: boolean; path?: string };
   subagents: SubagentSettings;
 }
@@ -248,6 +272,11 @@ export interface ProviderSetup {
   configured: boolean;
   action: string;
   planNote?: string;
+  catalogSources?: Array<{
+    id: string;
+    displayName: string;
+    kind: "models-endpoint" | "devin" | string;
+  }>;
   credentialLabel?: string;
   cliInstalled?: boolean;
   cliRunnable?: boolean;
@@ -261,8 +290,32 @@ export interface ProviderCatalog {
   discovered: string[];
   registered: string[];
   unregistered: string[];
+  /** Unregistered models whose protocol route is certified for curation. */
+  addable: string[];
+  /** Non-addable model id to the reason its route is withheld. */
+  blocked: Record<string, string>;
   unavailable: string[];
   contextLengths?: Record<string, number>;
+  metadata?: Record<string, {
+    contextWindow?: number;
+    maxOutputTokens?: number;
+    inputModalities?: string[];
+    outputModalities?: string[];
+    supportsTools?: boolean;
+    supportsToolChoice?: boolean;
+    reasoning?: {
+      supported?: boolean;
+      configurable?: boolean;
+      supportedEfforts?: string[];
+      defaultEffort?: string;
+      mandatory?: boolean;
+      defaultEnabled?: boolean;
+      advertisedSupportedEfforts?: string[];
+      advertisedDefaultEffort?: string;
+      effectiveMetadataSource?: string;
+    };
+    metadataSource?: string;
+  }>;
   free?: string[];
   /** True when the list came from the stored copy rather than a live request. */
   cached?: boolean;
@@ -406,6 +459,7 @@ export interface UsageEvent {
   progressOnlyRetried?: boolean;
   emptyCompletionUnrepairable?: boolean;
   emptyCompletionGuardReleased?: boolean;
+  emptyCompletionPreludeLimit?: "bytes" | "time";
 }
 
 export interface ActiveRequest {
@@ -534,6 +588,7 @@ export interface RouterControlApi {
   toggleMaximizeWindow(): Promise<unknown>;
   closeWindow(): Promise<unknown>;
   getSnapshot(): Promise<RouterSnapshot>;
+  getChatGptSession(): Promise<ChatGptSessionStatus>;
   getHealth(): Promise<RouterHealth>;
   getProviders(): Promise<ProviderSetupSnapshot>;
   discoverProviderModels(provider: string, options?: { refresh?: boolean }): Promise<ProviderCatalog>;
@@ -556,6 +611,17 @@ export interface RouterControlApi {
   setSubagentMode(mode: "all" | "selected" | "proven"): Promise<unknown>;
   setSubagentModel(slug: string, enabled: boolean): Promise<unknown>;
   setSubagentEffort(slug: string, effort: string): Promise<unknown>;
+  /** Runs the five live checks for each route in parallel; a complete pass promotes that route here. */
+  certifySubagentModels(slugs: string[]): Promise<{
+    results?: Array<{
+      slug: string;
+      certified?: boolean;
+      /** The run never reached a verdict: rate limit, outage, or a harness refusal. */
+      deferred?: boolean;
+      failedLabel?: string;
+      reason?: string;
+    }>;
+  }>;
   setSubagentSelection(selectAll: boolean): Promise<unknown>;
   setPickerModel(slug: string, visible: boolean): Promise<unknown>;
   setPickerModels(showAll: boolean): Promise<unknown>;
@@ -579,6 +645,7 @@ export interface RouterControlApi {
   setRouterDefault(model: string): Promise<unknown>;
   clearRouterDefault(): Promise<unknown>;
   setSignedRouting(enabled: boolean): Promise<unknown>;
+  setChatGptSessionSharing(enabled: boolean): Promise<ChatGptSessionStatus>;
   setPresence(mode: "always" | "follow-codex"): Promise<PresenceSnapshot>;
   controlService(action: "status" | "start"): Promise<unknown>;
   controlTray(action: "enable" | "disable" | "status" | "restart"): Promise<unknown>;

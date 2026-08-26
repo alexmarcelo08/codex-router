@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { pickerCommandArgs } from "./control-args.mjs";
+import { readControlHealth } from "./control-health.mjs";
 import { nativeSubagentCertification, promoteNativeMultiAgent } from "./catalog.mjs";
 import {
   applyModelOverlayPublication,
@@ -15,10 +16,8 @@ import { withNativeContextVariants } from "./native-context-variants.mjs";
 // vary by target, so reading it here does not disturb the per-target probes
 // below that re-import paths with their own MODEL_ROUTER_TARGET.
 import {
-  CALLER_SECRET_PATH,
   DSH_CATALOG_PATH,
   GEMINI_CATALOG_PATH,
-  PORTS,
   PROVIDER_SELECTION_PATH,
 } from "./paths.mjs";
 // Same reasoning: presence is a property of the shared plane, not of a target,
@@ -27,6 +26,10 @@ import { presenceSnapshot } from "./presence-state.mjs";
 import { harnessSnapshotWithWeb } from "./dsh-install.mjs";
 import { USER_MODELS_PATH } from "./user-models.mjs";
 import { refreshTargetPickerIfInstalled } from "./target-integration.mjs";
+import {
+  chatGptSessionStatus,
+  setChatGptSessionSharingFromControl,
+} from "./chatgpt-session-control.mjs";
 
 // Cross-target control plane for a tray/UI (e.g. the planned pane fork). It
 // reads which registry models are enabled per target and toggles them. Toggling
@@ -400,6 +403,7 @@ async function emitProbeSet(provider, desired) {
 async function routerCatalogSnapshot() {
   const { canonicalProviderId, readProviderSelection, selectedConfiguredListedModels } =
     await import("./provider-selection.mjs");
+  const { CHECKED_IN_MODELS } = await import("./model-registry.mjs");
   const { modelPickerSnapshot } = await import("./model-picker-state.mjs");
   const { subagentSettingsSnapshot } = await import("./multi-agent-state.mjs");
   const { applySubagentProofs } = await import("./subagent-proofs.mjs");
@@ -421,13 +425,31 @@ async function routerCatalogSnapshot() {
     subagentCertification: subagentCertification(model),
     visible: picker.hasExplicitVisibility ? visible.has(model.slug) : !hidden.has(model.slug),
     isFree: model.isFree === true,
+    ...(Number.isFinite(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+    ...(Array.isArray(model.inputModalities) ? { inputModalities: model.inputModalities } : {}),
     ...reasoningLevelField(model.reasoningLevels),
+  }));
+  const availableSlugs = new Set(models.map((model) => model.slug));
+  // Research inventory is intentionally separate from the routable catalog.
+  // A desktop surface may explain that a checked-in route exists before the
+  // provider is connected, but only `models` may reach a client publisher or
+  // picker mutation. Keep this projection metadata-only: endpoints and
+  // credential descriptors do not belong in the overview snapshot.
+  const knownModels = CHECKED_IN_MODELS.filter((model) => model.listed).map((model) => ({
+    slug: model.slug,
+    displayName: model.displayName,
+    provider: canonicalProviderId(model.provider),
+    available: availableSlugs.has(model.slug),
+    isFree: model.isFree === true,
+    ...(Number.isFinite(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+    ...(Array.isArray(model.inputModalities) ? { inputModalities: model.inputModalities } : {}),
   }));
   return {
     source: "codex-router",
     configured: existsSync(PROVIDER_SELECTION_PATH),
     enabledProviders: readProviderSelection(),
     models,
+    knownModels,
     picker,
     subagents: settings,
   };
@@ -468,6 +490,10 @@ async function printOverview(asJson) {
           // login-free aliases are client concerns, while this catalog is the
           // durable router policy shared by Codex, DSH, and Gemini.
           catalog: await routerCatalogSnapshot(),
+          // Explicit sharing consent and login usability are separate facts.
+          // This projection contains no token, account id, credential path, or
+          // filesystem age even though the underlying doctor status does.
+          chatgptSession: await chatGptSessionStatus(),
           presence: presenceSnapshot(),
           harness: await harnessSnapshotWithWeb(),
         },
@@ -643,6 +669,15 @@ async function loginProvider(providerId) {
   process.stdout.write(`${JSON.stringify(providerOnboardingSnapshot())}\n`);
 }
 
+async function invalidateProviderCatalog(providerId) {
+  const { providerOnboardingSnapshot } = await import("./provider-onboarding.mjs");
+  const provider = providerOnboardingSnapshot().providers.find((entry) => entry.id === providerId);
+  if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+  const { forgetProviderCatalogFamilyCache } = await import("./provider-catalogs.mjs");
+  const cleared = await forgetProviderCatalogFamilyCache(providerId);
+  process.stdout.write(`${JSON.stringify({ provider: providerId, cleared })}\n`);
+}
+
 async function readSecretFromStdin() {
   const chunks = [];
   let size = 0;
@@ -662,17 +697,19 @@ async function saveProviderCredential(providerId) {
   // together so a concurrent remove cannot create an enabled credentialless
   // provider between the child processes.
   await withModelOverlayLock(async () => {
-    saveApiCredential(providerId, value);
+    const { withProviderCatalogCacheTransaction } = await import("./model-catalog-cache.mjs");
+    const { providerCatalogFamilyCacheIds } = await import("./provider-catalogs.mjs");
+    await withProviderCatalogCacheTransaction((catalog) => {
+      saveApiCredential(providerId, value);
+      // One credential can expose several account catalogs. The same lock
+      // discovery uses for snapshot+commit makes write+invalidation one
+      // generation boundary rather than a race with an old in-flight fetch.
+      catalog.forget(providerCatalogFamilyCacheIds(providerId));
+    });
     const { enableProvider } = await import("./provider-selection.mjs");
     enableProvider(providerId);
     const { refreshTargetPickerIfInstalled } = await import("./target-integration.mjs");
     refreshTargetPickerIfInstalled();
-    // The stored catalog is what the previous credential could see. A new key
-    // may be a different account with a different entitlement, so the next
-    // read has to come from the provider rather than from the old account's
-    // list. Removal drops the entry for the same reason.
-    const { forgetProviderCatalogCache } = await import("./model-catalog-cache.mjs");
-    forgetProviderCatalogCache(providerId);
   });
   process.stdout.write(`${JSON.stringify(providerOnboardingSnapshot())}\n`);
 }
@@ -684,15 +721,16 @@ async function deleteProviderCredential(providerId) {
   // local-model mutations; status reads remain outside the lock.
   let removal;
   await withModelOverlayLock(async () => {
-    removal = await removeApiCredential(providerId);
+    const { withProviderCatalogCacheTransaction } = await import("./model-catalog-cache.mjs");
+    const { providerCatalogFamilyCacheIds } = await import("./provider-catalogs.mjs");
+    removal = await withProviderCatalogCacheTransaction(async (catalog) => {
+      const result = await removeApiCredential(providerId);
+      if (result.removedFiles) catalog.forget(providerCatalogFamilyCacheIds(providerId));
+      return result;
+    });
     if (removal.removedFiles) {
       const { refreshTargetPickerIfInstalled } = await import("./target-integration.mjs");
       refreshTargetPickerIfInstalled();
-      // The cached catalog was what this credential could see. Another key may
-      // see a different one, so drop it rather than let a disconnected
-      // provider keep showing the previous account's model list.
-      const { forgetProviderCatalogCache } = await import("./model-catalog-cache.mjs");
-      forgetProviderCatalogCache(providerId);
     }
   });
   process.stdout.write(
@@ -1200,6 +1238,125 @@ async function handleSubagents(action, value, flag, rest = []) {
     refreshModelSettingsCatalog();
     process.stdout.write(`${JSON.stringify({ verified })}\n`);
     return;
+  } else if (action === "certify") {
+    // The whole five-check run, for one route or several. Unlike `verify`
+    // above, whose two-request probe is diagnostic, a complete pass here
+    // promotes the route on this machine. It spends real quota on each route's
+    // own provider and on the native parent that delegates to it.
+    //
+    // The runs go in parallel because nothing about one route's checks touches
+    // another's: separate credentials, separate ephemeral Codex homes,
+    // separate application artifacts. What they do share is the proofs file
+    // and the catalog, so the recording and the republish stay here, in one
+    // process, after the fan-out -- two control processes racing
+    // read-modify-write on the proofs file would silently drop a verdict.
+    const slugs = [...new Set([value, ...rest].map((slug) => String(slug || "").trim()).filter(Boolean))];
+    if (!slugs.length) throw new Error("Usage: control subagents certify <model-slug> [<model-slug> ...]");
+    for (const slug of slugs) {
+      if (!(await knownModelSlug(slug))) throw new Error(`Unknown model slug: ${slug}`);
+    }
+    const [
+      { verifySubagentRoute, firstFailure, recordApplicationEvidence, runDeferred },
+      { recordVerification, recordVerificationStarted, clearSubagentProof },
+      { assertCallerSecret, callerBaseUrl },
+      { CALLER_SECRET_PATH, PORTS },
+      { findCodexBinary },
+      { VERSION },
+    ] = await Promise.all([
+      import("./subagent-certify.mjs"),
+      import("./subagent-proofs.mjs"),
+      import("./caller-auth.mjs"),
+      import("./paths.mjs"),
+      import("./codex-binary.mjs"),
+      import("./version.mjs"),
+    ]);
+    const { existsSync, readFileSync } = await import("node:fs");
+    if (!existsSync(CALLER_SECRET_PATH)) {
+      throw new Error(
+        "The local router caller key is missing; run ./bin/doctor --fix (.\\codex-router.ps1 doctor --fix on Windows).",
+      );
+    }
+    const secret = assertCallerSecret(readFileSync(CALLER_SECRET_PATH, "utf8").trim());
+    const codexBin = findCodexBinary();
+    const baseUrl = callerBaseUrl(PORTS.router, secret);
+    const { CODEX_HOME, MERGED_CATALOG_PATH } = await import("./paths.mjs");
+    for (const slug of slugs) recordVerificationStarted(slug);
+    const outcomes = await Promise.all(
+      slugs.map(async (slug) => {
+        try {
+          return {
+            slug,
+            result: await verifySubagentRoute(slug, {
+              baseUrl,
+              secret,
+              codexBin,
+              codexHome: CODEX_HOME,
+              catalogPath: MERGED_CATALOG_PATH,
+              routerVersion: VERSION,
+            }),
+          };
+        } catch (error) {
+          // One route's crash is not a verdict on the others, and must not
+          // reject the whole fan-out.
+          return { slug, error: error instanceof Error ? error.message : String(error) };
+        }
+      }),
+    );
+    const results = [];
+    let promoted = false;
+    for (const { slug, result, error } of outcomes) {
+      if (!result) {
+        recordVerification(slug, { checks: {}, routerVersion: VERSION, reason: error });
+        results.push({ slug, certified: false, reason: error });
+        continue;
+      }
+      // A run that only met a rate limit, an outage, or a missing entitlement
+      // learned nothing about the route. Clearing the record leaves the switch
+      // retryable instead of leaving "No" next to a model that was never
+      // actually refused.
+      if (!result.ok && runDeferred(result.checks)) {
+        clearSubagentProof(slug);
+        const detail = firstFailure(result.checks)?.detail;
+        results.push({ slug, certified: false, deferred: true, reason: detail });
+        continue;
+      }
+      recordVerification(slug, {
+        checks: result.checks,
+        routerVersion: VERSION,
+        ...(result.ok ? {} : { reason: firstFailure(result.checks)?.detail }),
+      });
+      // A pass is evidence worth more than this machine. Filing it as a
+      // v2_agent application is what lets a review promote the route for every
+      // installer, so nobody -- including this operator on their next machine
+      // -- pays to measure it again.
+      let application;
+      if (result.ok) {
+        promoted = true;
+        try {
+          application = recordApplicationEvidence(slug, {
+            checks: result.checks,
+            routerVersion: VERSION,
+            at: new Date().toISOString(),
+          });
+        } catch {
+          // A read-only or relocated checkout must not turn a genuine pass
+          // into a failure; the machine-local record already stands on its own.
+        }
+      }
+      const failure = result.ok ? undefined : firstFailure(result.checks);
+      results.push({
+        slug,
+        certified: result.ok,
+        ...(application ? { application } : {}),
+        ...(failure ? { failed: failure.check, failedLabel: failure.label, reason: failure.detail } : {}),
+      });
+    }
+    // One republish for the whole fan-out, and only when something was
+    // promoted: publication rewrites the merged catalog and the agents
+    // directory, which is far too much work to repeat per failed route.
+    if (promoted) refreshModelSettingsCatalog();
+    process.stdout.write(`${JSON.stringify({ results })}\n`);
+    return;
   } else if (action === "set") {
     if (!["on", "off"].includes(flag)) {
       throw new Error("Usage: control subagents set <model-slug> <on|off>");
@@ -1270,7 +1427,7 @@ async function handleSubagents(action, value, flag, rest = []) {
     throw new Error(
       "Usage: control subagents status|select-all|unselect-all|mode <all|selected|proven>|" +
         "set <model-slug> <on|off>|effort <model-slug> <level|default>|" +
-        "provider <provider-id> <on|off>|verify [model-slug ...]|" +
+        "provider <provider-id> <on|off>|verify [model-slug ...]|certify <model-slug>|" +
         "policy status|provider <provider-id> <on|off>|model <model-slug> <on|off>|family <name> <on|off>",
     );
   }
@@ -2399,13 +2556,28 @@ function handleService(action) {
   else process.stdout.write(`${JSON.stringify({ state: value === "stop" ? "stopped" : "running" })}\n`);
 }
 
-// Supervision for the tray companion. `disable` boots the agent out, which
-// stops the running tray too -- that is why the Settings toggle does not call
-// it and this stays an explicit command.
+// Supervision for the tray companion. `disable` boots the agent out and stops
+// the running tray too, so the Settings surface exposes it only behind its
+// explicit confirmation dialog.
 const TRAY_COMMANDS = { enable: "install", disable: "uninstall", status: "status", restart: "restart" };
 
 function handleTray(action) {
   const value = action || "status";
+  if (value === "refresh") {
+    const plan = spawnSync(
+      process.execPath,
+      [path.join(REPO_ROOT, "src", "install-plan.mjs"), "tray-plan"],
+      { cwd: REPO_ROOT, env: process.env, encoding: "utf8" },
+    );
+    if (plan.error) throw plan.error;
+    if (plan.status !== 0) {
+      throw new Error(String(plan.stderr || "The desktop companion refresh plan failed.").trim());
+    }
+    const decision = String(plan.stdout || "").trim();
+    if (decision === "rebuild") return handleTray("rebuild");
+    process.stdout.write(`${JSON.stringify({ tray: decision || "absent", rebuilt: false })}\n`);
+    return;
+  }
   if (value === "rebuild") {
     // The tray's footer Restart control wants the bundle rebuilt from this
     // checkout even when its source fingerprint says the installed copy is
@@ -2413,8 +2585,8 @@ function handleTray(action) {
     // the launcher directly. The launcher quits the running tray only after
     // the staged replacement passes verification. `bin/model-router-tray` is
     // a POSIX shell script; Windows reaches the same sequence through
-    // `codex-router.ps1 tray rebuild`, which owns the cargo-or-Electron
-    // choice so it exists once instead of drifting between here and there.
+    // `codex-router.ps1 tray rebuild`, which owns the same unified Electron
+    // replacement transaction so it exists once instead of drifting.
     const result = process.platform === "win32"
       ? spawnSync(
           "powershell.exe",
@@ -2427,10 +2599,11 @@ function handleTray(action) {
             path.join(REPO_ROOT, "codex-router.ps1"),
             "tray",
             "rebuild",
+            "--preserve-window",
           ],
-          { stdio: "inherit", env: process.env },
+          { stdio: "inherit", env: process.env, windowsHide: true },
         )
-      : spawnSync(path.join(REPO_ROOT, "bin", "model-router-tray"), [], {
+      : spawnSync(path.join(REPO_ROOT, "bin", "model-router-tray"), ["--preserve-window"], {
           stdio: "inherit",
           env: process.env,
         });
@@ -2442,13 +2615,34 @@ function handleTray(action) {
   }
   const subcommand = TRAY_COMMANDS[value];
   if (!subcommand) {
-    throw new Error(`Usage: control tray ${[...Object.keys(TRAY_COMMANDS), "rebuild"].join("|")}`);
+    throw new Error(`Usage: control tray ${[...Object.keys(TRAY_COMMANDS), "refresh", "rebuild"].join("|")}`);
   }
-  const result = spawnSync(
-    process.execPath,
-    [path.join(REPO_ROOT, "src", "tray-service.mjs"), subcommand],
-    { stdio: "inherit", env: process.env },
-  );
+  // Enabling can replace both a package and a pre-existing recognized task.
+  // On Windows that must go through the durable PowerShell transaction, which
+  // snapshots the exact task XML/SDDL and rollback package before touching
+  // either. Calling tray-service.mjs install directly would strand a partial
+  // registration when Task Scheduler or the ready handshake fails midway.
+  const result = value === "enable" && process.platform === "win32"
+    ? spawnSync(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          path.join(REPO_ROOT, "codex-router.ps1"),
+          "tray",
+          "install",
+          "--preserve-window",
+        ],
+        { stdio: "inherit", env: process.env, windowsHide: true },
+      )
+    : spawnSync(
+        process.execPath,
+        [path.join(REPO_ROOT, "src", "tray-service.mjs"), subcommand],
+        { stdio: "inherit", env: process.env, windowsHide: true },
+      );
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(`Tray ${value} failed with exit code ${result.status}.`);
@@ -2531,61 +2725,27 @@ async function handlePresence(action, value) {
   process.stdout.write(`${JSON.stringify(setPresenceMode(value))}\n`);
 }
 
+async function handleChatGptSession(action) {
+  const desired = action || "status";
+  if (desired === "status") {
+    process.stdout.write(`${JSON.stringify(await chatGptSessionStatus())}\n`);
+    return;
+  }
+  if (desired !== "enable" && desired !== "disable") {
+    throw new Error("Usage: control chatgpt-session status|enable|disable");
+  }
+  process.stdout.write(
+    `${JSON.stringify(await setChatGptSessionSharingFromControl(desired === "enable"))}\n`,
+  );
+}
+
 // The public `/health` leaf intentionally contains only the router summary and
 // a closed set of degraded dependency names. Desktop surfaces need the richer
 // local service view, but should not be handed the forwarders' credential
 // metadata. Read the protected health leaf here, then project it to the small
 // contract the tray and Control Center render.
 async function printHealth() {
-  const { assertCallerSecret, callerBaseUrl } = await import("./caller-auth.mjs");
-  let callerSecret;
-  try {
-    callerSecret = assertCallerSecret(readFileSync(CALLER_SECRET_PATH, "utf8").trim());
-  } catch {
-    process.stdout.write(`${JSON.stringify({
-      ok: false,
-      status: 0,
-      error: "The local router caller key is unavailable.",
-      activity: { state: "offline", active: [], activeCount: 0 },
-    })}\n`);
-    return;
-  }
-
-  const safeService = (service) => {
-    if (!service || typeof service !== "object") return undefined;
-    return {
-      reachable: service.reachable === true,
-      ...(typeof service.enabled === "boolean" ? { enabled: service.enabled } : {}),
-    };
-  };
-  try {
-    const response = await fetch(`${callerBaseUrl(PORTS.router, callerSecret)}/health`, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(3_000),
-    });
-    const raw = await response.json().catch(() => ({}));
-    const body = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-    process.stdout.write(`${JSON.stringify({
-      ok: response.ok,
-      status: response.status,
-      ...(typeof body.service === "string" ? { service: body.service } : {}),
-      ...(typeof body.version === "string" ? { version: body.version } : {}),
-      ...(typeof body.router === "string" ? { router: body.router } : {}),
-      ...(Array.isArray(body.degraded) ? { degraded: body.degraded } : {}),
-      ...(body.activity && typeof body.activity === "object" ? { activity: body.activity } : {}),
-      ...(safeService(body.gateway) ? { gateway: safeService(body.gateway) } : {}),
-      ...(safeService(body.oauth) ? { oauth: safeService(body.oauth) } : {}),
-      ...(safeService(body.api) ? { api: safeService(body.api) } : {}),
-      ...(safeService(body.grokOauth) ? { grokOauth: safeService(body.grokOauth) } : {}),
-    })}\n`);
-  } catch (error) {
-    process.stdout.write(`${JSON.stringify({
-      ok: false,
-      status: 0,
-      error: error?.name === "AbortError" ? "Health check timed out." : "Router is unreachable.",
-      activity: { state: "offline", active: [], activeCount: 0 },
-    })}\n`);
-  }
+  process.stdout.write(`${JSON.stringify(await readControlHealth())}\n`);
 }
 
 // --- dispatch ---------------------------------------------------------------
@@ -2616,6 +2776,11 @@ if (args.includes("--probe")) {
 } else if (args[0] === "login") {
   if (!args[1]) throw new Error("Usage: control login <oauth-provider>");
   await loginProvider(args[1]);
+} else if (args[0] === "catalog-cache") {
+  if (args[1] !== "invalidate" || !args[2]) {
+    throw new Error("Usage: control catalog-cache invalidate <provider>");
+  }
+  await invalidateProviderCatalog(args[2]);
 } else if (args[0] === "credential") {
   if (!args[1]) throw new Error("Usage: control credential <provider> [--remove]");
   if (args.includes("--remove")) {
@@ -2653,6 +2818,9 @@ if (args.includes("--probe")) {
   await handleHarness(args[1]);
 } else if (args[0] === "presence") {
   await handlePresence(args[1], args[2]);
+} else if (args[0] === "chatgpt-session") {
+  if (args.length > 2) throw new Error("Usage: control chatgpt-session status|enable|disable");
+  await handleChatGptSession(args[1]);
 } else if (args[0] === "health") {
   await printHealth();
 } else if (args[0] === "maintenance") {

@@ -1,5 +1,14 @@
 # Model Router installation instructions
 
+## Repository maintenance workflow
+
+- Use `$repo-maintainer` for incoming-change adoption decisions and consequential
+  maintenance that can cross modules, clients, operating systems, installers,
+  providers, credentials, protocols, generated artifacts, or release surfaces.
+- Use its impact analysis and risk-proportional verification before calling such
+  work complete. Skip it for factual replies and obviously isolated trivial
+  edits.
+
 These instructions apply when a user asks an agent to install this repository.
 
 ## Choose the target
@@ -44,8 +53,9 @@ user.
 3. Never ask the user to paste OAuth tokens or API keys into chat, command
    arguments, logs, environment snippets, or tracked files.
 4. Determine which provider IDs the user requested: `anthropic-api`,
-   `kimi-oauth`, `antigravity-oauth`, `kimi-api`, `kimi-api-cn`, `deepseek`, `grok-oauth`, `grok-api`, `qwen-plan`,
-   `zai-coding`, `ollama-cloud`, `minimax-token-plan`, `meta`, `clinepass`, and/or
+    `kimi-oauth`, `antigravity-oauth`, `kimi-api`, `kimi-api-cn`, `deepseek`, `grok-oauth`, `grok-api`, `qwen-plan`,
+    `zai-coding`, `ollama-cloud`, `minimax-token-plan`, `meta`, `clinepass`,
+    `venice`, `nousresearch`, and/or
    `opencode-go`
    (shown to users as "opencode Go/Zen"; its `opencode-go-messages`,
    `opencode-go-responses`, and `opencode-zen` variants share its stored key
@@ -56,7 +66,7 @@ user.
    shares its stored key and is enabled and disabled with it automatically;
    never select or toggle it separately. Command Code uses its stored or
    environment API key; it has no router-managed CLI sign-in path. The
-   catalog-only providers `groq`, `openrouter`, `together`, `fireworks`,
+   catalog-only providers `groq`, `together`, `fireworks`,
    `cerebras`, `mistral`, `nvidia-nim`, `siliconflow`, `huggingface`,
    `gemini-api`, `github-copilot`, `chutes`, and `orca` are also selectable, but they ship no
    preselected models: after
@@ -64,12 +74,22 @@ user.
    interactive terminal to choose models. If they did not specify and
    credentials already exist, use
    `configured` rather than showing providers that cannot authenticate.
+   `openrouter`, `venice`, and `nousresearch` behave the same way with one
+   exception: each ships the single checked-in Ox Alpha entry described under
+   "Ox Alpha ships on six routes" below, so their picker is not empty after the
+   key is stored, and everything else on them still has to be curated.
+   `venice` and `nousresearch` are ordinary API-key providers — Venice keys come
+   from venice.ai/settings/api and Nous Portal keys from
+   portal.nousresearch.com; neither has a router-managed CLI sign-in path, and
+   Venice carries a `planNote` because a free Venice account has no API
+   entitlement at all.
    The anonymous providers `opencode-free` and `kilo-free` are also selectable
    (`opencode-free-responses` is an internal, single-model protocol variant of
    the former and is never selected or curated separately),
    but they need no credential only for their documented free model subsets.
-   Both are catalog-only: they ship no preselected models and need
-   `bin/curate-models PROVIDER` after selection. `custom` is selectable on the
+   `kilo-free` is catalog-only and needs `bin/curate-models kilo-free` after
+   selection; `opencode-free` ships only the Ox Alpha entry and needs curation
+   for anything else. `custom` is selectable on the
    same terms and is a container whose models each name their own endpoint, so
    enabling it asks for nothing and curating it is unnecessary. All three must
    be selected explicitly; never select one on the user's behalf just because
@@ -219,7 +239,8 @@ translation layer and nothing else.
    proof. Relaying it upstream would put a router secret on a hop that can be
    substituted onto a provider — and leaving the header off is also what makes
    `callerBroughtNoUpstreamCredential` true, which is how a client with no
-   ChatGPT session of its own reaches native models.
+   ChatGPT session of its own reaches native models after the user explicitly
+   authorizes the shared router plane once.
 7. **The default model is written, and that is deliberate.** Gemini CLI's own
    default is `gemini-2.5-pro`, which this router does not route, so an install
    that left it alone would 404 on the user's first turn. `GEMINI_MODEL`
@@ -303,16 +324,18 @@ beside ours, so everything else in them is somebody else's work.
    the same bound the harness itself holds them to, and status output reports
    the redacted URL exactly as the Codex manager does. Never print the complete
    managed base URL.
-4. **Routed models are always published; native ones only while a session backs
-   them.** Publish only the selected, credentialed, listed, non-hidden routed
+4. **Routed models are always published; native ones require authorization and
+   a session.** Publish only the selected, credentialed, listed, non-hidden routed
    models. An unregistered slug on the router's `/v1/responses` endpoint is
    treated as native GPT traffic needing a ChatGPT session, which a harness
-   request does not carry — so a native model is advertised only while
+   request does not carry — so a native model is advertised only while the user
+   has explicitly authorized this shared local router plane and
    `nativeSessionStatus().usable` reports the session this machine is signed in
-   with as spendable, and is withheld again the moment it is not. Publishing one
-   the router cannot authorize offers a turn that 401s, which is the failure
-   this gate exists to prevent; never widen it to presence alone, because an
-   expired session is present.
+   with as spendable. `nativeSessionAvailable()` is the combined gate. Missing
+   consent, an unreadable consent marker, sign-out, or expiry withholds the model.
+   Publishing one the router cannot authorize offers a turn that 401s, which is
+   the failure this gate exists to prevent; never widen it to presence alone,
+   because an expired session is present.
    The vision-bridge engine candidates still exclude native models: that call
    site admits an engine on evidence the *caller's* session can spend it, and a
    substituted session is not the caller's.
@@ -417,6 +440,48 @@ dependency tree. That tree is pinned and hashed rather than re-resolved.
    unhashed requirement ever installs, every other check in that job is
    meaningless. Do not add a resolver cache there; a cache hit can serve an
    already-unpacked wheel and skip the hash check the job exists to perform.
+
+## `stop` and `start` act on the same layer, and the proxy survives either
+
+`bin/stop` unloads the background service. `bin/start` used to exec the
+supervisor in the foreground instead, so the obvious `stop; start` pair was
+asymmetric: it retired the managed service and left an unmanaged copy in its
+place. The copy carried the calling shell's environment rather than the
+installed one and died with the shell that started it.
+
+That is how a live installation lost its proxy. A `stop; start` issued from a
+`zsh -lc` that a desktop app had spawned produced a router with no
+`HTTP_PROXY` and no `NODE_USE_ENV_PROXY`, because the shell had neither. Every
+upstream was dialled directly, chatgpt.com timed out, and the router answered
+502 with the message from `src/transport-failure.mjs` telling the operator to
+set an opt-in that was already set -- in the LaunchAgent it had just unloaded.
+The service definition still looked correct at every glance.
+
+1. **Both verbs go through `src/service.mjs`.** `bin/start` starts the managed
+   service; `bin/stop` stops it. Never reintroduce a `bin/start` that execs
+   `src/start.mjs`, and never add a lifecycle verb that manages the service on
+   one side and bypasses it on the other.
+2. **The foreground supervisor stays reachable, never by accident.**
+   `bin/start --foreground` is the debugging path. It is opt-in because an
+   operator who types it has chosen to run unmanaged; an operator who types
+   `start` has not.
+3. **A silent environment adopts the recorded proxy.**
+   `inheritedProxyEnvironment()` in `src/proxy-environment.mjs` reads the
+   install manifest, and `src/start.mjs` applies it to `process.env` before it
+   reads anything or spawns a child, so the router and all three forwarders
+   inherit it. This is the belt to the service definition's braces: it makes
+   the foreground path, and any future path that execs the supervisor directly,
+   reach upstreams exactly as the managed one does.
+4. **Silence is the only trigger.** `proxyEnvironmentDeclared` already treats a
+   named proxy -- or any `NODE_USE_ENV_PROXY`, `0` included -- as the operator
+   speaking, and the restore defers to it. A deliberate unproxied run stays
+   unproxied. Do not widen the trigger to "no proxy reachable" or similar
+   inference; the manifest records a decision, not a guess.
+5. **Coverage.** `test/proxy-environment.test.mjs` holds the restore contract
+   and `test/service-lifecycle.test.mjs` holds the dispatch: that `bin/start`
+   reaches the service layer, that `--foreground` reaches the supervisor, and
+   that a supervisor booted with a silent environment comes up carrying the
+   manifest's proxy.
 
 ## The gateway is restarted in place; the router is not taken down with it
 
@@ -673,6 +738,20 @@ so the unit of evidence is always the slug, never the model name.
    Codex collaboration: tool calls work, encrypted subagent payload relay works
    without disclosure, a marker-return spawn succeeds, and a same-thread
    follow-up succeeds. Otherwise omit it and retain conservative v1 behavior.
+   The registry is not the only way a route reaches v2. The operator's own
+   selection promotes it — `subagents mode selected` plus `subagents set <slug>
+   on`, or `mode all` — and so does a completed local verification of all five
+   checks recorded in `multi-agent-proofs.json`. Selection is the ordinary path
+   and the one the Control Center switch uses; the registry exists so nobody
+   has to select a proven route by hand. None of this loosens the gate: an
+   explicit `off` beats every mode, a hidden model is never promoted, a partial
+   verification or a mismatched slug promotes nothing, the legacy diagnostic
+   statuses promote nothing, and only the pull request that moves the registry
+   entry may accept a `v2_agent/` application. Read
+   `docs/SUBAGENT-CERTIFICATION.md` in full before changing
+   `src/subagent-*.mjs`, `src/multi-agent-state.mjs`, `v2_agent/`, or the
+   Subagents column — it records which questions have already been answered at
+   the cost of provider quota.
 5. Remember that Codex advertises only a small priority-ordered subset of native
    spawn-model overrides. Adjust priority intentionally and keep the desired
    Kimi/Grok/GPT choices in that visible subset; do not crowd them out
@@ -1074,8 +1153,73 @@ in `src/model-registry.mjs`, never by the registry fragment alone, and the
 `ANONYMOUS_ENDPOINTS` table beside it is the reason a fragment edit cannot
 point a credential-free provider at a model somebody would be billed for.
 `opencode-free` and `kilo-free` each expose a large free subset picked out by a
-naming rule that changes without notice, so both stay catalog-only: discovery
-filters the provider's live `/models` response and the user curates locally.
+naming rule that changes without notice, so neither ships that subset: discovery
+filters the provider's live `/models` response and the user curates locally. The
+one checked-in exception is `opencode-free/ox-alpha`, and it is an exception the
+rule itself permits — `x-preview-f-free` earns its place by ending in `-free`,
+the same test `anonymousModelAllowed` applies to everything else, so removing
+the fragment would not make the id any less routable.
+
+## Ox Alpha ships on six routes, and the ladder belongs to the model
+
+Ox Alpha is one stealth model that six of this repository's providers resell,
+each under its own id: `x-preview-f-free` on `opencode-free`, `ox-alpha-free`
+on `opencode-go`, `stealth/ox-alpha` on `openrouter`, `commandcode` and
+`nousresearch`, and `stealth-ox-alpha` on `venice`. Every one of those was read
+from that provider's own live `/models` response; `test/ox-alpha.test.mjs` pins
+the repository values against local drift. A later upstream rename or withdrawal
+still needs a fresh authenticated catalog read or live inference probe; a static
+test cannot discover remote state.
+
+The effort ladder is `low`/`high`/`max` on all six, and it is the **model's**
+ladder rather than any reseller's. The model always thinks, and its upstream
+refuses an off-ladder rung by name:
+
+```
+HTTP 400 — [1210] This model always engages in thinking and cannot be
+disabled; please use low, high, or max
+```
+
+`none`, `off`, `minimal`, `medium`, `xhigh`, `ultra`, `default` and `auto` all
+draw that response; `low`, `high` and `max` return 200 with monotonically rising
+reasoning-token counts, so the three rungs are real behavior and not just enum
+validation.
+
+**Venice is the one catalog that disagrees, and it is the one to distrust.** It
+advertises `none`/`low`/`medium`/`high` for this id. That is not a reseller
+knowing something the others do not: it is Venice's most generic shape, shared
+with eight unrelated models, and it contains `none` — a rung this model refuses
+by name. Venice is perfectly capable of publishing a model-specific ladder when
+it has one (`low`/`high`/`max` for GLM-5.3, `none`/`high`/`max` for GLM-5.2), so
+the generic shape here reads as an unverified onboarding default. OpenRouter's
+live API, Nous Portal's live API, and models.dev for `openrouter`,
+`opencode-go`, `opencode`, `kilo` and `nano-gpt` all say `low`/`high`/`max`.
+This is the standing exception to "the provider's own catalog decides": when a
+reseller's advertised ladder contains a rung the model itself rejects by name,
+the model wins, and the disagreement gets written down — here and in the
+fragment's `description` — rather than silently resolved.
+
+The ladder also collides with the effort clamp in `src/catalog.mjs`. Codex
+gained the `max` variant in 0.143.0, so on anything older the catalog rewrites
+this model's default down to `xhigh` — a rung every route refuses. The
+`ox-alpha` request profile in `src/api-forwarder.mjs` is what closes that loop:
+it clamps whatever Codex sent onto the rungs the model's own registry entry
+declares, so `xhigh` and `ultra` land back on `max`, and `medium` and `minimal`
+land on `low`. An absent effort stays absent so the upstream's own default
+applies, and `thinking` is always stripped because none of these routes document
+it and it cannot be switched off anyway.
+
+The window is 1,048,576 tokens with 131,072 of output on every route, and
+forced `tool_choice: "required"` is observed to work everywhere, so no route
+needs `auto-tool-choice`. Only `opencode-free/ox-alpha` carries curated
+`availabilityNux`: it is the one route with no credential to buy first, and
+curated announcement copy is seen by every installer. The other five rely on the
+automatic seven-day announcement, which fires only once their provider is
+actually credentialed and enabled.
+
+Free is a preview, not a property. If the providers start billing it, the
+honest change is to drop `isFree` and rewrite the descriptions, not to leave a
+"Free" badge on a metered model.
 
 ## A provider whose models each name their own endpoint
 
@@ -1679,10 +1823,12 @@ user has to find in the docs, so `src/dsh-install.mjs` owns the other half.
   get right — the PATH a spawn inherits, where npm drops binaries per platform,
   which line of npm's output is worth showing — are exactly what drifts.
 - Native GPT models are published only while `codex-native-session.mjs` reports
-  a usable session: they need a ChatGPT session, a harness request carries none
-  of its own, and the fallback spends the one this machine is already signed in
-  with. They are withheld again the moment it is missing or expired. The count
-  the button reports is the routable set, not the picker.
+  both explicit shared-plane authorization and a usable session: they need a
+  ChatGPT session, and a harness request carries none of its own. One
+  `chatgpt-session enable` applies to every local client for this OS user; they
+  are withheld again the moment authorization is revoked or the session is
+  missing or expired. The count the button reports is the routable set, not the
+  picker.
 
 `src/dsh-web.mjs` starts and finds the browser UI, so the tray's button can be
 `Open site` once there is a site to open.
@@ -1736,9 +1882,18 @@ attaches both. A harness turn attaches neither, so native models advertised to
 it were models it could never spend.
 
 `src/codex-native-session.mjs` closes that by falling back to the session this
-machine is already signed in with, in `$CODEX_HOME/auth.json`. The user is
-signed in to Codex here; asking them to sign in again for a client running as
-the same user on the same machine buys nothing.
+machine is already signed in with, in `$CODEX_HOME/auth.json`, only after the
+user authorizes that use once. `native-session-consent.json` is an owner-only
+marker carrying no credential and belongs to the shared router plane: asking
+the same OS user to sign in or authorize once per harness buys nothing.
+
+- **Consent fails closed.** A missing, malformed, or unrecognized marker means
+  off. `chatgpt-session enable` refuses until `codex login` has produced a
+  usable session, then republishes every installed client; `disable` removes
+  the marker and republishes them again without signing Codex out. The
+  `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=1` environment override is the explicit
+  headless opt-in, while `0` is an emergency off switch. No other value is
+  consent.
 
 - **Fallback, never override.** Injection happens only when the request carried
   no *upstream* credential. Codex always carries one, so a Codex turn is
@@ -1772,10 +1927,11 @@ the same user on the same machine buys nothing.
   a status call, and not put in an error message. `nativeSessionStatus()` reports
   presence, usability, and age — `test/codex-native-session.test.mjs` asserts the
   serialized status contains neither the token nor the account id.
-- **It widens the caller key.** With the fallback on, anything holding that key
-  spends the ChatGPT subscription and not only the API-key providers. That is a
-  deliberate, user-made tradeoff; `CODEX_ROUTER_NATIVE_SESSION_FALLBACK=0` turns
-  it off and the harness silently drops back to routed models only.
+- **It widens the caller key.** With sharing authorized, anything holding that
+  local key spends the ChatGPT subscription and not only the API-key providers.
+  That is a deliberate, user-made tradeoff recorded once for the shared plane;
+  `chatgpt-session disable` revokes it everywhere and the clients silently drop
+  back to routed models only.
 - **The access token lives about ten days, and Codex renews it only when Codex
   is used.** A harness-only stretch longer than that would otherwise leave the
   router sending a dead token. `nativeSessionHeaders()` reads the `exp` claim

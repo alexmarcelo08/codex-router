@@ -44,11 +44,16 @@ import {
   writeJson,
   writeStreamErrorEvent,
 } from "./http-utils.mjs";
-import { EmptyCompletionGuard } from "./empty-completion-guard.mjs";
+import {
+  EmptyCompletionGuard,
+  EmptyCompletionTerminalGuard,
+  isEmptyCompletionPreludeLimitError,
+} from "./empty-completion-guard.mjs";
 import {
   ZaiResponsesCompatTransform,
   zaiResponsesCompatTransform,
 } from "./zai-responses-compat.mjs";
+import { deepseekToolMessageCompatTransform } from "./deepseek-tool-message-compat.mjs";
 import {
   MERGED_CATALOG_PATH,
   NATIVE_CATALOG_PATH,
@@ -133,6 +138,10 @@ import { readVisionBridgeSettings } from "./vision-bridge-state.mjs";
 import { installedNativeVisionEngines } from "./vision-engines.mjs";
 import { ageToolResults } from "./tool-result-aging.mjs";
 import {
+  applyTokenMaxxingOverlay,
+  tokenMaxxingActive,
+} from "./instruction-overlays.mjs";
+import {
   nativeToolResultAgingEnabled,
   toolResultAgingEnabled,
 } from "./tool-result-aging-state.mjs";
@@ -192,6 +201,22 @@ const ZERO_INPUT_ESTIMATE = process.env.CODEX_ROUTER_ZERO_INPUT_ESTIMATE !== "0"
 // turn it off without downgrading the router.
 const EMPTY_COMPLETION_RETRY =
   process.env.CODEX_ROUTER_EMPTY_COMPLETION_RETRY !== "0";
+const configuredEmptyCompletionPreludeMs = Number(
+  process.env.CODEX_ROUTER_EMPTY_COMPLETION_PRELUDE_MS || 30_000,
+);
+const EMPTY_COMPLETION_PRELUDE_MS =
+  Number.isFinite(configuredEmptyCompletionPreludeMs) &&
+  configuredEmptyCompletionPreludeMs >= 0
+    ? configuredEmptyCompletionPreludeMs
+    : 30_000;
+const configuredEmptyCompletionPreludeBytes = Number(
+  process.env.CODEX_ROUTER_EMPTY_COMPLETION_PRELUDE_BYTES || 1024 * 1024,
+);
+const EMPTY_COMPLETION_PRELUDE_BYTES =
+  Number.isFinite(configuredEmptyCompletionPreludeBytes) &&
+  configuredEmptyCompletionPreludeBytes >= 0
+    ? Math.floor(configuredEmptyCompletionPreludeBytes)
+    : 1024 * 1024;
 const ERROR_STATUS_DURATION_MS = 8_000;
 const configuredDecodedBodyBytes = Number(
   process.env.MODEL_ROUTER_MAX_DECODED_BODY_BYTES ||
@@ -1866,7 +1891,14 @@ async function summarize(request, payload, route, signal) {
   // The summarizer may select source IDs, but only this deterministic pass can
   // decide which source types and machine outcomes enter a kcr2 checkpoint.
   const prepared = prepareCompaction(normalized);
-  const aged = ageToolResults(normalized, { enabled: toolResultAgingEnabled() });
+  const agingEnabled = toolResultAgingEnabled();
+  const aged = ageToolResults(normalized, {
+    enabled: agingEnabled,
+    // A compaction request is already at the context boundary. Dense shaping
+    // gives its summarizer more distinct evidence without changing low-pressure
+    // turns, and every shaped result keeps the exact rerun path.
+    tokenMaxxing: agingEnabled,
+  });
 
   // The models this compaction may be moved to, in order, starting with the one
   // the conversation is on. A provider already known to be empty is dropped
@@ -2200,7 +2232,7 @@ function observeSubagentOutcome(request, route, status, options = {}) {
 // Both are avoided the same way: nothing here writes to `payload` or to
 // `agedInput`. The tool list is a local, and the input array is copied before
 // anything rewrites it.
-async function buildRoutedRequest({ request, payload, route, agedInput }) {
+async function buildRoutedRequest({ request, payload, route, agedInput, tokenMaxxing = false }) {
   let namespacesFlattened = false;
   let flattenedNamespaces = new Map();
   const bridged = await bridgeVisionInput(
@@ -2364,6 +2396,9 @@ async function buildRoutedRequest({ request, payload, route, agedInput }) {
     delete routed.reasoning_effort;
   }
   if (provider?.id === "fireworks") delete routed.web_search_options;
+  routed.instructions = applyTokenMaxxingOverlay(routed.instructions, {
+    active: tokenMaxxing,
+  });
   return {
     body: Buffer.from(JSON.stringify(routed), "utf8"),
     target: `${GATEWAY_BASE}/responses`,
@@ -2381,23 +2416,64 @@ async function buildRoutedRequest({ request, payload, route, agedInput }) {
   };
 }
 
+// Normalize once, but decide pressure and age from that pristine normalized
+// input for every route that may actually serve the turn. Collaboration
+// payloads are still carried as `encrypted_content` in the caller's body and
+// become model-visible text during normalization, so estimating the original
+// bytes would discount precisely the payload the routed model will read.
+//
+// Pressure is route-specific as well: failover candidates can have very
+// different auto-compaction budgets. Re-running the deterministic aging pass
+// on a hop keeps the destination's threshold honest without ever shaping an
+// already-shaped copy.
+async function prepareRoutedRequest({
+  request,
+  payload,
+  route,
+  normalizedInput,
+  agingEnabled,
+}) {
+  const tokenMaxxing = agingEnabled && tokenMaxxingActive({
+    enabled: true,
+    estimatedTokens: estimateInputTokens(
+      JSON.stringify({ ...payload, input: normalizedInput }),
+      { contextWindow: route.contextWindow },
+    ),
+    autoCompact: route.autoCompact,
+  });
+  const aged = ageToolResults(normalizedInput, {
+    enabled: agingEnabled,
+    tokenMaxxing,
+  });
+  const built = await buildRoutedRequest({
+    request,
+    payload,
+    route,
+    agedInput: aged.input,
+    tokenMaxxing,
+  });
+  return {
+    ...built,
+    agedInput: aged.input,
+    toolResultAging: aged.stats,
+  };
+}
+
 // The models this turn could be moved to, best first. Deliberately computed
 // only after a failure is already known: `selectedConfiguredListedModels()`
 // probes every provider's credential synchronously and spawns
 // `/usr/bin/security` per keychain service on macOS, which would cost every
 // healthy turn about 250ms of blocked event loop for nothing.
-function failoverCandidates({ route, routedBody, agedInput, flattenedNamespaces, chain }) {
+function failoverCandidates({ route, agedInput, flattenedNamespaces, chain }) {
   const hidden = readHiddenModels();
   return rankFailoverCandidates(
     selectedConfiguredListedModels().filter((model) => !hidden.has(model.slug)),
     {
       from: route,
-      // The bytes this turn was about to send. `estimateInputTokens` errs high
-      // by design, which is the safe direction here: a candidate that cannot
-      // hold the conversation would answer the quota failure with a
-      // context-window rejection, which is a strictly worse turn than the one
-      // it replaced.
-      estimatedTokens: estimateInputTokens(routedBody),
+      // Context fit is checked after rebuilding the request for each
+      // destination below. Using this route's body here can reject a candidate
+      // whose lower pressure threshold would shape that same conversation into
+      // its smaller window.
       needsImage: inputHasImage(agedInput),
       // Only a turn that can actually spawn children needs a model that has
       // been through the collaboration proof. A child answering its own turn
@@ -2405,6 +2481,15 @@ function failoverCandidates({ route, routedBody, agedInput, flattenedNamespaces,
       needsMultiAgentV2: collaborationToolAvailable(flattenedNamespaces),
       chain,
     },
+  );
+}
+
+function routedRequestFits(route, body) {
+  const estimatedTokens = estimateInputTokens(body);
+  return (
+    !Number.isFinite(estimatedTokens) ||
+    !Number.isFinite(route?.contextWindow) ||
+    route.contextWindow >= estimatedTokens
   );
 }
 
@@ -2438,17 +2523,17 @@ async function attemptModelFailover({
   payload,
   route,
   agedInput,
-  routedBody,
   flattenedNamespaces,
   verdict,
   status,
   signal,
+  normalizedInput,
+  agingEnabled,
 }) {
   const settings = readFailoverSettings();
   if (!settings.enabled) return undefined;
   const candidates = failoverCandidates({
     route,
-    routedBody,
     agedInput,
     flattenedNamespaces,
     chain: settings.chain,
@@ -2470,7 +2555,17 @@ async function attemptModelFailover({
     let built;
     let upstream;
     try {
-      built = await buildRoutedRequest({ request, payload, route: model, agedInput });
+      built = await prepareRoutedRequest({
+        request,
+        payload,
+        route: model,
+        normalizedInput,
+        agingEnabled,
+      });
+      if (!routedRequestFits(model, built.body)) {
+        logFailover(route, model, verdict.reason, status, "context-too-small");
+        continue;
+      }
       upstream = await fetch(built.target, {
         method: "POST",
         headers: built.headers,
@@ -2546,7 +2641,8 @@ async function handleResponses(request, response, requestUrl) {
   // failure the router absorbed, the other a failure it had to hand to the
   // client, and only the second is visible to the user.
   let emptyCompletionUnrepairable = false;
-  let guardReleasedForBudget = false;
+  let emptyCompletionPreludeLimit;
+  let preludeLimitRetryable = false;
   let finalStatus;
   let activityStatus;
   let usageRecorded = false;
@@ -2646,9 +2742,11 @@ async function handleResponses(request, response, requestUrl) {
     let namespacesFlattened = false;
     let flattenedNamespaces = new Map();
     // The route-independent half of the input, computed once. Failing the turn
-    // over to another model rebuilds only the route-dependent half against
-    // these exact items, so the encrypted-payload relay and the aging pass are
-    // paid for once however many models the turn ends up asking.
+    // over to another model rebuilds pressure shaping from these pristine
+    // normalized items, so an encrypted-payload relay is paid for once while
+    // every destination gets its own auto-compaction threshold.
+    let normalizedInput;
+    let agingEnabled = false;
     let agedInput;
     // Adopts a rebuilt request for a different model. Everything downstream --
     // the response transforms, the prompt-token estimate, the empty-completion
@@ -2661,6 +2759,8 @@ async function handleResponses(request, response, requestUrl) {
       namespacesFlattened = built.namespacesFlattened;
       flattenedNamespaces = built.flattenedNamespaces;
       pendingInterrupts = built.pendingInterrupts;
+      agedInput = built.agedInput;
+      toolResultAging = built.toolResultAging;
       target = built.target;
       headers = built.headers;
       routedBody = built.body;
@@ -2672,15 +2772,21 @@ async function handleResponses(request, response, requestUrl) {
       });
     };
     if (route) {
-      const normalized = await normalizeRoutedAgentInput(
+      normalizedInput = await normalizeRoutedAgentInput(
         request,
         payload.input,
         controller.signal,
       );
-      const aged = ageToolResults(normalized, { enabled: toolResultAgingEnabled() });
-      toolResultAging = aged.stats;
-      agedInput = aged.input;
-      const built = await buildRoutedRequest({ request, payload, route, agedInput });
+      agingEnabled = toolResultAgingEnabled();
+      const built = await prepareRoutedRequest({
+        request,
+        payload,
+        route,
+        normalizedInput,
+        agingEnabled,
+      });
+      toolResultAging = built.toolResultAging;
+      agedInput = built.agedInput;
       namespacesFlattened = built.namespacesFlattened;
       flattenedNamespaces = built.flattenedNamespaces;
       pendingInterrupts = built.pendingInterrupts;
@@ -2698,17 +2804,30 @@ async function handleResponses(request, response, requestUrl) {
       if (cooled) {
         const [next] = failoverCandidates({
           route,
-          routedBody,
           agedInput,
           flattenedNamespaces,
           chain: settings.chain,
         });
         if (next) {
-          logFailover(route, next.model, `cooled_until_${cooled.until}`, "not-sent", "swapped");
-          adoptRoute(
-            next.model,
-            await buildRoutedRequest({ request, payload, route: next.model, agedInput }),
-          );
+          const candidate = await prepareRoutedRequest({
+            request,
+            payload,
+            route: next.model,
+            normalizedInput,
+            agingEnabled,
+          });
+          if (routedRequestFits(next.model, candidate.body)) {
+            logFailover(route, next.model, `cooled_until_${cooled.until}`, "not-sent", "swapped");
+            adoptRoute(next.model, candidate);
+          } else {
+            logFailover(
+              route,
+              next.model,
+              `cooled_until_${cooled.until}`,
+              "not-sent",
+              "context-too-small",
+            );
+          }
         }
       }
     } else {
@@ -2812,11 +2931,12 @@ async function handleResponses(request, response, requestUrl) {
           payload,
           route,
           agedInput,
-          routedBody,
           flattenedNamespaces,
           verdict,
           status: upstream.status,
           signal: controller.signal,
+          normalizedInput,
+          agingEnabled,
         });
         if (moved) {
           // The attempt that failed is still a turn that happened and still
@@ -2868,6 +2988,7 @@ async function handleResponses(request, response, requestUrl) {
               ? "Ollama"
               : provider?.ownedBy || provider?.displayName || route.provider,
           providerKind: provider?.kind,
+          providerAuthMode: provider?.authMode,
           retryAfterSeconds: Number.isFinite(retryAfterSeconds)
             ? retryAfterSeconds
             : undefined,
@@ -2926,6 +3047,10 @@ async function handleResponses(request, response, requestUrl) {
         envelopeCompat = new ZaiResponsesCompatTransform();
       }
       if (envelopeCompat) transforms.push(envelopeCompat);
+      const deepseekToolMessageCompat = route
+        ? deepseekToolMessageCompatTransform(route.provider, contentType)
+        : undefined;
+      if (deepseekToolMessageCompat) transforms.push(deepseekToolMessageCompat);
       // Restore flattened namespace calls for routed chat-completions providers,
       // and inject missing finished-child interrupts for both routed and native
       // multi-agent parents (San Francisco uses native GPT).
@@ -2943,18 +3068,54 @@ async function handleResponses(request, response, requestUrl) {
       }
       const guard =
         route && EMPTY_COMPLETION_RETRY
-          ? new EmptyCompletionGuard(contentType)
+          ? new EmptyCompletionGuard(contentType, {
+              maxPreludeBytes: EMPTY_COMPLETION_PRELUDE_BYTES,
+              maxPreludeMs: EMPTY_COMPLETION_PRELUDE_MS,
+            })
           : undefined;
-      if (guard) transforms.push(guard);
+      if (guard) {
+        transforms.push(
+          guard,
+          new EmptyCompletionTerminalGuard(guard, contentType, {
+            maxHeldTerminalBytes: EMPTY_COMPLETION_PRELUDE_BYTES,
+          }),
+        );
+      }
       return { transforms, usageObserver, guard };
     };
     const firstPipeline = createResponsePipeline(upstreamContentType);
     usageTransform = firstPipeline.usageObserver;
     emptyCompletionGuard = firstPipeline.guard;
     const relayOpen = Boolean(emptyCompletionGuard);
-    await pipeResponse(upstream, response, HOP_BY_HOP_HEADERS, firstPipeline.transforms, {
-      leaveOpen: relayOpen,
-    });
+    let streamedPreludeFailureKind;
+    try {
+      await pipeResponse(
+        upstream,
+        response,
+        HOP_BY_HOP_HEADERS,
+        firstPipeline.transforms,
+        { leaveOpen: relayOpen },
+      );
+    } catch (error) {
+      if (isEmptyCompletionPreludeLimitError(error) && !clientGone) {
+        emptyCompletionPreludeLimit = error.kind;
+        if (nothingRelayed(response)) {
+          preludeLimitRetryable = true;
+        } else {
+          streamedPreludeFailureKind = error.kind;
+          emptyCompletionUnrepairable = true;
+          writeStreamErrorEvent(response, {
+            code: "precontent_limit",
+            message:
+              error.kind === "time"
+                ? "The model stopped producing output before the router's stream deadline."
+                : "The model exceeded the router's bounded stream parser before producing output.",
+          });
+        }
+      } else {
+        throw error;
+      }
+    }
     usage = usageTransform?.tokenUsage();
     // Time to the first generated token, which is what an output-tokens-per-
     // second figure has to divide by. `upstreamLatencyMs` stops at the response
@@ -2973,14 +3134,16 @@ async function handleResponses(request, response, requestUrl) {
       (clientGone || (response.destroyed && !response.writableFinished)) &&
       !nativeCompletedBeforeClose;
     finalStatus = clientWalkedAway ? 0 : upstream.status;
+    if (streamedPreludeFailureKind && !clientWalkedAway) finalStatus = 502;
     emptyCompletion = emptyCompletionGuard?.isEmpty() === true && !clientWalkedAway;
-    // The guard releases long turns at its byte/time budget without a verdict.
-    // Those turns may have been empty completions the router chose not to
-    // retry, which must stay distinguishable from healthy long turns in the
-    // meter — otherwise a 40-second reasoning-only empty completion reads as a
-    // successful 40-second turn.
-    guardReleasedForBudget =
-      emptyCompletionGuard?.releasedForBudget() === true && !clientWalkedAway;
+    emptyCompletionPreludeLimit ||=
+      emptyCompletionGuard?.preludeLimitKind?.();
+    // A pre-content limit used to release the staged bytes and stop parsing,
+    // which could turn an unknown stream into a successful-looking empty
+    // response. The byte limit now fails while every byte is replaceable so
+    // the retry below can recover it. The time limit still releases for
+    // latency, but keeps parsing so a terminal empty turn becomes a stated SSE
+    // error instead of a blank success.
     // The turn produced nothing, but the guard had already released it: the
     // upstream proved it was generating (reasoning), so the head, response id,
     // and prologue are on the wire. A second attempt would graft a second
@@ -2991,11 +3154,15 @@ async function handleResponses(request, response, requestUrl) {
     if (emptyCompletion && emptyCompletionGuard?.suppressedPrologue() !== true) {
       emptyCompletionUnrepairable = true;
       writeStreamErrorEvent(response, {
-        code: "empty_completion",
-        message:
-          "The model streamed reasoning but produced no output. The router could not retry because the response had already started.",
+        code: emptyCompletionPreludeLimit
+          ? "precontent_limit"
+          : "empty_completion",
+        message: emptyCompletionPreludeLimit
+          ? "The model produced no output before the router's safety limit and then completed without output. The response had already started, so the router could not retry it safely."
+          : "The model streamed reasoning but produced no output. The router could not retry because the response had already started.",
       });
-    } else if (emptyCompletion) {
+      finalStatus = 502;
+    } else if (emptyCompletion || preludeLimitRetryable) {
       // The upstream answered 200 with nothing and never proved otherwise, so
       // the guard still holds every byte. Retry the identical request once:
       // same bytes, same headers, same signal. The discarded first stream means
@@ -3027,8 +3194,12 @@ async function handleResponses(request, response, requestUrl) {
         );
         writeEmptyCompletionError(
           response,
-          "empty_completion_retry_failed",
-          "The model returned an empty completion and the router's retry failed upstream.",
+          emptyCompletionPreludeLimit
+            ? "precontent_limit_retry_failed"
+            : "empty_completion_retry_failed",
+          emptyCompletionPreludeLimit
+            ? "The model produced no output before the router's safety limit and the retry failed upstream."
+            : "The model returned an empty completion and the router's retry failed upstream.",
         );
         finalStatus = 502;
       }
@@ -3054,12 +3225,20 @@ async function handleResponses(request, response, requestUrl) {
           await rejectedResponse.body?.cancel().catch(() => {});
           writeEmptyCompletionError(
             response,
-            upstream2.ok
-              ? "empty_completion_retry_protocol_error"
-              : "empty_completion_retry_failed",
-            upstream2.ok
-              ? "The model returned an empty completion and the router's retry returned an incompatible response."
-              : "The model returned an empty completion and the router's retry failed upstream.",
+            emptyCompletionPreludeLimit
+              ? upstream2.ok
+                ? "precontent_limit_retry_protocol_error"
+                : "precontent_limit_retry_failed"
+              : upstream2.ok
+                ? "empty_completion_retry_protocol_error"
+                : "empty_completion_retry_failed",
+            emptyCompletionPreludeLimit
+              ? upstream2.ok
+                ? "The model produced no output before the router's safety limit and the retry returned an incompatible response."
+                : "The model produced no output before the router's safety limit and the retry failed upstream."
+              : upstream2.ok
+                ? "The model returned an empty completion and the router's retry returned an incompatible response."
+                : "The model returned an empty completion and the router's retry failed upstream.",
           );
           finalStatus = 502;
         } else {
@@ -3069,22 +3248,66 @@ async function handleResponses(request, response, requestUrl) {
           const secondPipeline = createResponsePipeline(retryContentType);
           retryUsageTransform = secondPipeline.usageObserver;
           retryEmptyCompletionGuard = secondPipeline.guard;
-          await pipeResponse(
-            upstream2,
-            response,
-            HOP_BY_HOP_HEADERS,
-            secondPipeline.transforms,
-            { leaveOpen: true },
-          );
+          let retryPreludeFailureKind;
+          let retryStreamedPreludeFailureKind;
+          try {
+            await pipeResponse(
+              upstream2,
+              response,
+              HOP_BY_HOP_HEADERS,
+              secondPipeline.transforms,
+              { leaveOpen: true },
+            );
+          } catch (error) {
+            if (isEmptyCompletionPreludeLimitError(error) && !clientGone) {
+              emptyCompletionPreludeLimit ||= error.kind;
+              if (nothingRelayed(response)) {
+                retryPreludeFailureKind = error.kind;
+              } else {
+                retryStreamedPreludeFailureKind = error.kind;
+                emptyCompletionUnrepairable = true;
+                writeStreamErrorEvent(response, {
+                  code: "precontent_limit",
+                  message:
+                    error.kind === "time"
+                      ? "The retry stopped producing output before the router's stream deadline."
+                      : "The retry exceeded the router's bounded stream parser before producing output.",
+                });
+              }
+            } else {
+              throw error;
+            }
+          }
           const retryClientWalkedAway =
             clientGone || (response.destroyed && !response.writableFinished);
-          guardReleasedForBudget =
-            guardReleasedForBudget ||
-            (retryEmptyCompletionGuard?.releasedForBudget() === true &&
-              !retryClientWalkedAway);
+          emptyCompletionPreludeLimit ||=
+            retryEmptyCompletionGuard?.preludeLimitKind?.();
           if (retryClientWalkedAway) {
             finalStatus = 0;
             if (secondPipeline.guard.hasContent()) emptyCompletion = false;
+          } else if (retryStreamedPreludeFailureKind) {
+            finalStatus = 502;
+          } else if (
+            retryEmptyCompletionGuard.isEmpty() &&
+            retryEmptyCompletionGuard.suppressedPrologue() !== true
+          ) {
+            emptyCompletionUnrepairable = true;
+            writeStreamErrorEvent(response, {
+              code: emptyCompletionPreludeLimit
+                ? "precontent_limit"
+                : "empty_completion",
+              message: emptyCompletionPreludeLimit
+                ? "The retry produced no output before the router's safety limit and then completed without output."
+                : "The retry streamed reasoning but completed without output.",
+            });
+            finalStatus = 502;
+          } else if (retryPreludeFailureKind) {
+            writeEmptyCompletionError(
+              response,
+              "precontent_limit",
+              "The model produced no output before the router's safety limit. The router retried once and the retry reached a safety limit again.",
+            );
+            finalStatus = 502;
           } else if (secondPipeline.guard.isEmpty()) {
             writeEmptyCompletionError(
               response,
@@ -3135,7 +3358,9 @@ async function handleResponses(request, response, requestUrl) {
       ...(emptyCompletionRetried ? { emptyCompletionRetried: true } : {}),
       ...(usage?.progressOnlyRetried ? { progressOnlyRetried: true } : {}),
       ...(emptyCompletionUnrepairable ? { emptyCompletionUnrepairable: true } : {}),
-      ...(guardReleasedForBudget ? { emptyCompletionGuardReleased: true } : {}),
+      ...(emptyCompletionPreludeLimit
+        ? { emptyCompletionPreludeLimit }
+        : {}),
       ...(failoverFrom ? { failoverFrom } : {}),
     });
     // The same usage this turn just metered, and the same two disqualifiers
@@ -3165,6 +3390,10 @@ async function handleResponses(request, response, requestUrl) {
         }${
           emptyCompletionUnrepairable ? " empty-completion-unrepairable=true" : ""
         }${emptyCompletion ? " empty-completion=true" : ""}${
+          emptyCompletionPreludeLimit
+            ? ` empty-completion-prelude-limit=${emptyCompletionPreludeLimit}`
+            : ""
+        }${
           failoverFrom ? ` failover-from=${failoverFrom}` : ""
         }`,
       );
@@ -3172,15 +3401,6 @@ async function handleResponses(request, response, requestUrl) {
   } catch (error) {
     upstreamLatencyMs ??= Date.now() - startedAt;
     if (retryEmptyCompletionGuard?.hasContent()) emptyCompletion = false;
-    if (!clientGone) {
-      // A pipeline can fail after either guard has released its held bytes but
-      // before the success path samples the accessor. Preserve that verdict in
-      // the failure event too.
-      guardReleasedForBudget =
-        guardReleasedForBudget ||
-        emptyCompletionGuard?.releasedForBudget() === true ||
-        retryEmptyCompletionGuard?.releasedForBudget() === true;
-    }
     if (usageTransform) {
       usage = mergeTokenUsage(
         usageTransform.tokenUsage(),
@@ -3271,7 +3491,9 @@ async function handleResponses(request, response, requestUrl) {
         ...(response.headersSent ? { streamAborted: true } : {}),
         ...(emptyCompletion ? { emptyCompletion: true } : {}),
         ...(emptyCompletionRetried ? { emptyCompletionRetried: true } : {}),
-        ...(guardReleasedForBudget ? { emptyCompletionGuardReleased: true } : {}),
+        ...(emptyCompletionPreludeLimit
+          ? { emptyCompletionPreludeLimit }
+          : {}),
       });
       usageRecorded = true;
     }

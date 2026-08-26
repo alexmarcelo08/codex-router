@@ -939,6 +939,59 @@ private struct IslandUsageLineChart: View {
 
 // Internal rather than private: the status panel's quota-reset rows in
 // ModelRouterTrayApp.swift render the same provider mark.
+enum ProviderIconLayout {
+  static func fittedRect(sourceRect: NSRect, targetSize: NSSize) -> NSRect {
+    guard sourceRect.width > 0, sourceRect.height > 0, targetSize.width > 0, targetSize.height > 0 else {
+      return .zero
+    }
+    let scale = min(
+      targetSize.width / sourceRect.width,
+      targetSize.height / sourceRect.height
+    )
+    let drawSize = NSSize(width: sourceRect.width * scale, height: sourceRect.height * scale)
+    return NSRect(
+      x: (targetSize.width - drawSize.width) / 2,
+      y: (targetSize.height - drawSize.height) / 2,
+      width: drawSize.width,
+      height: drawSize.height
+    )
+  }
+
+  static func visibleImageRect(_ image: NSImage) -> NSRect {
+    guard let representation = image.representations
+      .compactMap({ $0 as? NSBitmapImageRep })
+      .max(by: { ($0.pixelsWide * $0.pixelsHigh) < ($1.pixelsWide * $1.pixelsHigh) }),
+      representation.hasAlpha
+    else {
+      return NSRect(origin: .zero, size: image.size)
+    }
+
+    var minX = representation.pixelsWide
+    var minY = representation.pixelsHigh
+    var maxX = -1
+    var maxY = -1
+    for y in 0..<representation.pixelsHigh {
+      for x in 0..<representation.pixelsWide {
+        if representation.colorAt(x: x, y: y)?.alphaComponent ?? 0 > 8.0 / 255.0 {
+          minX = min(minX, x)
+          minY = min(minY, y)
+          maxX = max(maxX, x)
+          maxY = max(maxY, y)
+        }
+      }
+    }
+    guard maxX >= minX, maxY >= minY else {
+      return NSRect(origin: .zero, size: image.size)
+    }
+    return NSRect(
+      x: image.size.width * CGFloat(minX) / CGFloat(representation.pixelsWide),
+      y: image.size.height * CGFloat(minY) / CGFloat(representation.pixelsHigh),
+      width: image.size.width * CGFloat(maxX - minX + 1) / CGFloat(representation.pixelsWide),
+      height: image.size.height * CGFloat(maxY - minY + 1) / CGFloat(representation.pixelsHigh)
+    )
+  }
+}
+
 struct ProviderIcon: View {
   let providerID: String
   let size: CGFloat
@@ -951,10 +1004,15 @@ struct ProviderIcon: View {
           .resizable()
           .interpolation(.high)
           .scaledToFit()
+          // Keep provider marks inside the same point-sized slot as preset
+          // icons in both the menu bar and Dynamic Island.
+          .frame(width: size, height: size)
+          .clipped()
       } else {
         Image(systemName: "cpu")
-          .font(.system(size: size * 0.5, weight: .semibold))
+          .font(.system(size: size * 0.82, weight: .semibold))
           .foregroundStyle(routerMuted)
+          .frame(width: size, height: size)
       }
     }
     .frame(width: size, height: size)
@@ -980,7 +1038,27 @@ struct ProviderIcon: View {
       withExtension: assetExtension,
       subdirectory: "ProviderIcons"
     ) ?? resources.url(forResource: assetName, withExtension: assetExtension)
-    return url.flatMap(NSImage.init(contentsOf:))
+    guard let image = url.flatMap(NSImage.init(contentsOf:)) else { return nil }
+    return fittedProviderImage(image)
+  }
+
+  private func fittedProviderImage(_ image: NSImage) -> NSImage {
+    let targetSize = NSSize(width: max(1, size), height: max(1, size))
+    let sourceRect = ProviderIconLayout.visibleImageRect(image)
+    let drawRect = ProviderIconLayout.fittedRect(sourceRect: sourceRect, targetSize: targetSize)
+    let fitted = NSImage(size: targetSize)
+    fitted.lockFocus()
+    NSGraphicsContext.current?.imageInterpolation = .high
+    image.draw(
+      in: drawRect,
+      from: sourceRect,
+      operation: .sourceOver,
+      fraction: 1,
+      respectFlipped: true,
+      hints: [.interpolation: NSImageInterpolation.high]
+    )
+    fitted.unlockFocus()
+    return fitted
   }
 
   private var assetName: String? {
@@ -992,6 +1070,9 @@ struct ProviderIcon: View {
     if providerID.hasPrefix("commandcode") { return "commandcode" }
     if providerID == "github-copilot" { return "github-copilot" }
     if providerID == "chutes" { return "chutes" }
+    if providerID == "venice" { return "venice" }
+    if providerID == "nousresearch" { return "nousresearch" }
+    if providerID == "openrouter" { return "openrouter" }
     // opencode-free plus the opencode-go API/Messages/Responses routes.
     if providerID.hasPrefix("opencode") { return "opencode-free" }
     if providerID == "kilo-free" { return "kilo-free" }
@@ -1024,6 +1105,9 @@ struct ProviderIcon: View {
     if providerID == "github-copilot" { return "GitHub Copilot" }
     if providerID == "clinepass" { return "ClinePass" }
     if providerID == "chutes" { return "Chutes" }
+    if providerID == "venice" { return "Venice" }
+    if providerID == "nousresearch" { return "Nous Research" }
+    if providerID == "openrouter" { return "OpenRouter" }
     if providerID == "opencode-free" { return "OpenCode Free" }
     if providerID == "kilo-free" { return "Kilo Free" }
     // Deliberately not a vendor name: this provider is a container for

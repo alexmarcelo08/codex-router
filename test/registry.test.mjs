@@ -20,6 +20,7 @@ const {
   endpointForModel,
   LISTED_MODELS,
   MODEL_BY_SLUG,
+  MODEL_SLUG_ALIASES,
   MODELS,
   PROVIDERS,
   providerNeedsNoKey,
@@ -112,6 +113,7 @@ test("provider registry exposes configured API and OAuth model families", () => 
       "commandcode/minimax-m3",
       "commandcode/muse-spark-1.2",
       "commandcode/nemotron-3-ultra",
+      "commandcode/ox-alpha",
       "commandcode/qwen3.7-flash",
       "commandcode/qwen3.7-max",
       "commandcode/qwen3.7-plus",
@@ -133,23 +135,27 @@ test("provider registry exposes configured API and OAuth model families", () => 
       "meta/muse-spark-1.2-contributor",
       "meta/muse-spark-1.2",
       "minimax-token-plan/minimax-m3",
+      "nousresearch/ox-alpha",
       "ollama-cloud/deepseek-v4-flash",
       "ollama-cloud/deepseek-v4-pro",
       "ollama-cloud/glm-5.2",
       "ollama-cloud/kimi-k2.7-code",
+      "ollama-cloud/kimi-k3",
       "ollama-cloud/minimax-m3",
+      "opencode-go/deepseek-v4-flash-vision-exp",
       "opencode-go/deepseek-v4-flash",
       "opencode-go/deepseek-v4-pro",
       "opencode-go/glm-5.1",
       "opencode-go/glm-5.2",
       "opencode-go/glm-5.3",
-      "opencode-go/grok-4.5",
       "opencode-go/hy3",
       "opencode-go/kimi-k2.6",
       "opencode-go/kimi-k2.7-code",
       "opencode-go/kimi-k3",
       "opencode-go/mimo-v2.5-pro",
       "opencode-go/mimo-v2.5",
+      "opencode-go/ox-alpha",
+      "opencode-go-messages/minimax-m2.5",
       "opencode-go-messages/minimax-m2.7",
       "opencode-go-messages/minimax-m3",
       "opencode-go-messages/qwen3.6-plus",
@@ -157,7 +163,10 @@ test("provider registry exposes configured API and OAuth model families", () => 
       "opencode-go-messages/qwen3.7-plus",
       "opencode-go-messages/qwen3.8-max",
       "opencode-go-responses/gpt-5.6-luna",
+      "opencode-go-responses/grok-4.5",
       "opencode-go-responses/muse-spark-1.2-contributor",
+      "opencode-free/ox-alpha",
+      "openrouter/ox-alpha",
       "qwen-plan/deepseek-v4-flash-0731",
       "qwen-plan/deepseek-v4-pro-0813",
       "qwen-plan/deepseek-v4-pro",
@@ -167,6 +176,7 @@ test("provider registry exposes configured API and OAuth model families", () => 
       "qwen-plan/qwen3.7-plus",
       "qwen-plan/qwen3.8-max-preview",
       "qwen-plan/qwen3.8-max",
+      "venice/ox-alpha",
       "xiaomi-mimo/mimo-v2.5-pro",
       "xiaomi-mimo/mimo-v2.5",
       "zai-api/glm-4.7",
@@ -322,7 +332,15 @@ test("provider registry exposes configured API and OAuth model families", () => 
   assert.deepEqual(venice.credential.environment, ["VENICE_API_KEY"]);
   assert.equal(venice.credential.file, "venice-api-key.secret");
   assert.deepEqual(venice.credential.keychainServices, ["codex-router-venice"]);
-  assert.equal(LISTED_MODELS.some(({ provider }) => provider === "venice"), false);
+  // Venice arrived as catalog-only, and stayed that way until Ox Alpha was
+  // checked in for it. It now ships exactly that one entry -- the picker is not
+  // empty once a key is stored, and everything else on Venice still has to be
+  // curated -- so this asserts the entry rather than merely that something is
+  // listed, which would also pass if a curation bug leaked extra models in.
+  assert.deepEqual(
+    LISTED_MODELS.filter(({ provider }) => provider === "venice").map(({ slug }) => slug),
+    ["venice/ox-alpha"],
+  );
   const opencodeFree = PROVIDERS.get("opencode-free");
   const opencodeFreeResponses = PROVIDERS.get("opencode-free-responses");
   assert.equal(opencodeFree.authMode, "anonymous");
@@ -491,6 +509,19 @@ test("provider registry exposes configured API and OAuth model families", () => 
     assert.equal(k3.defaultEffort, "max", slug);
     assert.equal(k3.requestProfile, "kimi-k3", slug);
   }
+  // Kimi K3 on Ollama Cloud uses the :cloud upstream tag and the shared
+  // ollama-cloud request profile; the ladder matches the other K3 providers.
+  const ollamaK3 = MODEL_BY_SLUG.get("ollama-cloud/kimi-k3");
+  assert.equal(ollamaK3.upstreamModel, "kimi-k3:cloud");
+  assert.equal(ollamaK3.requestProfile, "ollama-cloud");
+  assert.deepEqual(
+    ollamaK3.reasoningLevels.map((level) => level.effort),
+    ["low", "high", "max"],
+  );
+  assert.equal(ollamaK3.defaultEffort, "max");
+  assert.equal(ollamaK3.contextWindow, 1_048_576);
+  assert.equal(ollamaK3.autoCompact, 940_000);
+  assert.deepEqual(ollamaK3.inputModalities, ["text", "image"]);
   // Hosted search is an xAI-backend behavior. Standalone search is limited to
   // provider/model pairs verified against Codex's client-side replay path.
   for (const slug of ["grok-oauth/grok-4.5", "grok-oauth/grok-4.6"]) {
@@ -884,6 +915,61 @@ test("instruction overlays must name a shipped overlay", async () => {
     );
     assert.equal(result.status, 1);
     assert.match(result.stderr, /invalid instructionOverlay/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("static aliases fail closed on checked-in source collisions and missing targets", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const nodePath = (await import("node:path")).default;
+  const { spawnSync } = await import("node:child_process");
+  const dir = mkdtempSync(nodePath.join(tmpdir(), "registry-static-alias-test-"));
+  const load = (mutate, name) => {
+    const document = readRegistryDocument("config");
+    mutate(document);
+    const registryPath = nodePath.join(dir, name);
+    writeFileSync(registryPath, JSON.stringify(document));
+    return spawnSync(
+      process.execPath,
+      [
+        "-e",
+        "import('./src/model-registry.mjs')"
+          + ".catch((e)=>{console.error(e.message);process.exit(1);})",
+      ],
+      { encoding: "utf8", env: { ...process.env, MODEL_ROUTER_REGISTRY: registryPath } },
+    );
+  };
+  try {
+    const collision = load((document) => {
+      const source = document.models.find((model) => model.provider === "opencode-go");
+      document.models.push({
+        ...source,
+        slug: "opencode-go/grok-4.5",
+        gatewayModel: "opencode-go-static-alias-collision",
+        upstreamModel: "static-alias-collision",
+        displayName: "Static alias collision",
+        description: "Negative registry fixture.",
+        compHash: "static-alias-collision-v1",
+      });
+    }, "collision.json");
+    assert.equal(collision.status, 1);
+    assert.match(
+      collision.stderr,
+      /static model slug alias opencode-go\/grok-4\.5 collides with a checked-in model/,
+    );
+
+    const missing = load((document) => {
+      document.models = document.models.filter(
+        (model) => model.slug !== "opencode-go-responses/grok-4.5",
+      );
+    }, "missing-target.json");
+    assert.equal(missing.status, 1);
+    assert.match(
+      missing.stderr,
+      /static model slug alias .* points to unknown model opencode-go-responses\/grok-4\.5/,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1389,7 +1475,15 @@ test("opencode's DeepSeek models never receive a forced tool_choice", () => {
   // The sibling opencode routes keep their defaults: the probe proved nothing
   // about them, and a provider-wide default is what the rule forbids. (kimi-k3
   // carries its own effort profile, so it is not a clean control here.)
-  for (const slug of ["opencode-go/glm-5.3", "opencode-go/grok-4.5", "opencode-go/mimo-v2.5"]) {
+  for (const slug of ["opencode-go/glm-5.3", "opencode-go-responses/grok-4.5", "opencode-go/mimo-v2.5"]) {
     assert.equal(MODEL_BY_SLUG.get(slug).requestProfile, undefined, slug);
   }
+  const goGrok = MODEL_BY_SLUG.get("opencode-go-responses/grok-4.5");
+  assert.equal(goGrok.provider, "opencode-go-responses");
+  assert.equal(PROVIDERS.get(goGrok.provider).protocol, "openai-responses");
+  assert.equal(
+    MODEL_SLUG_ALIASES.get("opencode-go/grok-4.5"),
+    "opencode-go-responses/grok-4.5",
+  );
+  assert.equal(MODEL_BY_SLUG.get("opencode-go/grok-4.5"), goGrok);
 });

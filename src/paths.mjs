@@ -119,6 +119,13 @@ export const SIGNED_PROVIDER_MODE_PATH = path.join(STATE_DIR, "signed-provider-m
 export const CODEX_DEFAULT_MODEL_PATH = path.join(STATE_DIR, "codex-default-model.json");
 export const PROVIDER_SELECTION_PATH = path.join(STATE_DIR, "enabled-providers.json");
 export const DISCOVERY_MODE_PATH = path.join(STATE_DIR, "discovery-mode.json");
+// Explicit, shared-plane consent for letting router-authenticated local clients
+// use the ChatGPT session owned by this user's Codex installation. The file
+// carries no credential; its presence records only the user's authorization.
+export const NATIVE_SESSION_CONSENT_PATH = path.join(
+  STATE_DIR,
+  "native-session-consent.json",
+);
 // The last model list each provider published for itself. It is a convenience
 // cache for the curation surfaces, never an authority: what is registered
 // locally is always recomputed from the live registry.
@@ -157,7 +164,14 @@ export const TRAY_LAUNCH_AGENT_PATH = path.join(
 // resolves by name and can be found and quit like any other. This constant and
 // scripts/build-macos-tray-app.sh's default must name the same directory.
 export const TRAY_APP_PATH =
-  trayBundleDir("darwin", os.homedir()) ?? path.join(os.homedir(), "Applications", "Model Router.app");
+  trayBundleDir("darwin", os.homedir()) ?? path.join(os.homedir(), "Applications", "Codex Router.app");
+// The previous unified native host used this visible name. It is migration
+// evidence only: launch, status, and new packages must resolve TRAY_APP_PATH.
+export const LEGACY_USER_TRAY_APP_PATH = path.join(
+  os.homedir(),
+  "Applications",
+  "Model Router.app",
+);
 export const LEGACY_TRAY_APP_PATH = path.join(SOURCE_ROOT, "dist", "Model Router.app");
 export const TRAY_APP_BINARY = path.join(TRAY_APP_PATH, "Contents", "MacOS", "ModelRouterTray");
 // Task Scheduler names the tray separately from the router's own task so

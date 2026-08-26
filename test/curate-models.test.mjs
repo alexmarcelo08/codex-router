@@ -25,6 +25,7 @@ const {
 } =
   await import("../src/curate-models.mjs");
 const {
+  curatedModelBlockReason,
   curatedModelContextLength,
   curatedModelDescription,
   curatedModelIds,
@@ -33,6 +34,7 @@ const {
   curatedModelReasoningLevels,
   curationProviderIds,
 } = await import("../src/opencode-curation.mjs");
+const { CHECKED_IN_MODELS, MODEL_BY_SLUG } = await import("../src/model-registry.mjs");
 const {
   DEFAULT_AUTO_COMPACT,
   DEFAULT_CONTEXT_WINDOW,
@@ -70,7 +72,7 @@ test("curation merges current unrelated providers and rejects stale same-provide
   );
 });
 
-test("OpenCode curation pairs only the anonymous Free protocol variants", () => {
+test("OpenCode curation keeps each endpoint family on its documented protocol", () => {
   assert.deepEqual(curationProviderIds("opencode-free"), [
     "opencode-free",
     "opencode-free-responses",
@@ -80,8 +82,19 @@ test("OpenCode curation pairs only the anonymous Free protocol variants", () => 
     "opencode-free-responses",
   ]);
   assert.deepEqual(curationProviderIds("opencode-zen"), ["opencode-zen"]);
-  assert.deepEqual(curationProviderIds("opencode-go"), ["opencode-go"]);
-  assert.deepEqual(curationProviderIds("opencode-go-messages"), ["opencode-go-messages"]);
+  assert.deepEqual(curationProviderIds("opencode-go"), [
+    "opencode-go",
+    "opencode-go-messages",
+    "opencode-go-responses",
+  ]);
+  assert.deepEqual(curationProviderIds("opencode-go-messages"), [
+    "opencode-go",
+    "opencode-go-messages",
+    "opencode-go-responses",
+  ]);
+  assert.equal(curatedModelProviderId("opencode-go", "minimax-m2.5"), "opencode-go-messages");
+  assert.equal(curatedModelProviderId("opencode-go", "grok-4.5"), "opencode-go-responses");
+  assert.equal(curatedModelProviderId("opencode-go", "deepseek-v4-flash-vision-exp"), "opencode-go");
   assert.equal(
     curatedModelProviderId("opencode-free", "muse-spark-1.2-contributor-free"),
     "opencode-free-responses",
@@ -94,6 +107,135 @@ test("OpenCode curation pairs only the anonymous Free protocol variants", () => 
     curatedModelProviderId("opencode-free", "x-preview-f-free"),
     "opencode-free",
   );
+  assert.equal(curatedModelBlockReason("opencode-go", "grok-4.5"), undefined);
+  assert.match(
+    curatedModelBlockReason("opencode-go", "future-responses-only-model"),
+    /provider catalog lists future-responses-only-model.*has not verified whether the model uses Chat, Messages, or Responses.*router compatibility limitation.*future update/s,
+  );
+  assert.throws(
+    () => curatedModelProviderId("opencode-go", "future-responses-only-model"),
+    /cannot be added safely/,
+  );
+  assert.equal(
+    curatedModelProviderId("opencode-go", "existing-private-model", {
+      existingProvider: "opencode-go-responses",
+    }),
+    "opencode-go-responses",
+  );
+});
+
+test("Command Code curation accepts only its exact certified Chat and Messages routes", () => {
+  assert.deepEqual(curationProviderIds("commandcode"), [
+    "commandcode",
+    "commandcode-messages",
+  ]);
+  assert.deepEqual(curationProviderIds("commandcode-messages"), [
+    "commandcode",
+    "commandcode-messages",
+  ]);
+  for (const model of CHECKED_IN_MODELS.filter(({ provider }) => (
+    provider === "commandcode" || provider === "commandcode-messages"
+  ))) {
+    assert.equal(
+      curatedModelProviderId("commandcode", model.upstreamModel),
+      model.provider,
+      model.slug,
+    );
+  }
+  assert.match(
+    curatedModelBlockReason("commandcode", "claude-future-messages-only"),
+    /provider catalog lists claude-future-messages-only.*has not verified whether the model uses Chat or Messages.*router compatibility limitation.*future update/s,
+  );
+  for (const model of ["gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini"]) {
+    assert.match(
+      curatedModelBlockReason("commandcode", model),
+      new RegExp(`provider catalog lists ${model}.*router compatibility limitation`, "s"),
+    );
+  }
+  assert.throws(
+    () => curatedModelProviderId("commandcode", "claude-future-messages-only"),
+    /cannot be added safely/,
+  );
+  assert.equal(
+    curatedModelProviderId("commandcode", "existing-private-model", {
+      existingProvider: "commandcode-messages",
+    }),
+    "commandcode-messages",
+  );
+});
+
+test("scripted OpenCode curation refuses an uncertified discovered protocol route", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "curate-models-opencode-blocked-"));
+  const fixture = path.join(dir, "models.json");
+  writeFileSync(fixture, JSON.stringify({ data: [{ id: "future-responses-only-model" }] }));
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "src", "curate-models.mjs"),
+        "opencode-go",
+        "--models",
+        "future-responses-only-model",
+        "--fixture",
+        fixture,
+        "--no-apply",
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          CODEX_ROUTER_STATE_DIR: dir,
+          MODEL_ROUTER_USER_MODELS: path.join(dir, "user-models.json"),
+          OPENCODE_API_KEY: "",
+        },
+      },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /provider catalog lists future-responses-only-model.*cannot be added safely/s,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("scripted Command Code curation refuses an uncertified discovered protocol route", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "curate-models-commandcode-blocked-"));
+  const fixture = path.join(dir, "models.json");
+  writeFileSync(fixture, JSON.stringify({ data: [{ id: "claude-future-messages-only" }] }));
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "src", "curate-models.mjs"),
+        "commandcode",
+        "--models",
+        "claude-future-messages-only",
+        "--fixture",
+        fixture,
+        "--no-apply",
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          CODEX_ROUTER_STATE_DIR: dir,
+          MODEL_ROUTER_USER_MODELS: path.join(dir, "user-models.json"),
+          COMMAND_CODE_API_KEY: "",
+        },
+      },
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /provider catalog lists claude-future-messages-only.*cannot be added safely/s,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("OpenCode Free curation knows the documented windows its live catalog omits", () => {
@@ -453,7 +595,7 @@ test("OpenCode Free curation migrates Muse to Responses while Ox stays on Chat",
       path.join(root, "src", "curate-models.mjs"),
       "opencode-free",
       "--models",
-      `${museId},${oxId}`,
+      museId,
       "--fixture",
       fixture,
       "--no-apply",
@@ -481,22 +623,25 @@ test("OpenCode Free curation migrates Muse to Responses while Ox stays on Chat",
     const first = run();
     assert.equal(first.status, 0, first.stderr);
     const stored = JSON.parse(readFileSync(file, "utf8"));
-    assert.equal(stored.models.length, 2);
+    // Only Muse is curated now. Ox Alpha ships as a checked-in entry, so
+    // curation must leave it alone rather than write a second copy of it into
+    // the user's models -- the stronger claim, and the one that would break if
+    // the checked-in fragment ever stopped taking precedence.
+    assert.equal(stored.models.length, 1);
     const muse = stored.models.find((model) => model.upstreamModel === museId);
-    const ox = stored.models.find((model) => model.upstreamModel === oxId);
+    assert.equal(stored.models.some((model) => model.upstreamModel === oxId), false);
     assert.equal(muse.provider, "opencode-free-responses");
     assert.equal(muse.slug, `opencode-free-responses/${museId}`);
     assert.equal(muse.displayName, oldMuse.displayName);
     assert.equal(muse.contextWindow, oldMuse.contextWindow);
     assert.deepEqual(muse.inputModalities, oldMuse.inputModalities);
     assert.equal(muse.requestProfile, oldMuse.requestProfile);
-    assert.equal(ox.provider, "opencode-free");
-    assert.equal(ox.slug, `opencode-free/${oxId}`);
-    assert.equal(ox.contextWindow, 1_000_000);
-    assert.equal(ox.autoCompact, 850_000);
+    const oxEntry = MODEL_BY_SLUG.get("opencode-free/ox-alpha");
+    assert.equal(oxEntry.provider, "opencode-free");
+    assert.equal(oxEntry.upstreamModel, oxId);
 
     const picker = JSON.parse(readFileSync(pickerFile, "utf8"));
-    assert.deepEqual(picker.visible, [muse.slug, ox.slug].sort());
+    assert.deepEqual(picker.visible, [muse.slug]);
     assert.equal(picker.visible.includes(oldMuse.slug), false);
 
     const configResult = spawnSync(
@@ -521,8 +666,11 @@ test("OpenCode Free curation migrates Muse to Responses while Ox stays on Chat",
       /model: "openai\/responses\/opencode-free-responses-muse-spark-1-2-contributor-free"/,
     );
     assert.doesNotMatch(museBlock, /use_chat_completions_api/);
-    const oxBlock = blockFor(ox.gatewayModel);
-    assert.match(oxBlock, /model: "openai\/opencode-free-x-preview-f-free"/);
+    // Ox still reaches Chat Completions -- now from the checked-in entry rather
+    // than from a curated one, which is what "Ox stays on Chat" has to mean
+    // once it ships checked in.
+    const oxBlock = blockFor(oxEntry.gatewayModel);
+    assert.match(oxBlock, /model: "openai\/opencode-free-ox-alpha"/);
     assert.match(oxBlock, /use_chat_completions_api: true/);
 
     const beforeRepeat = readFileSync(file, "utf8");
@@ -667,7 +815,12 @@ test("scripted OpenCode Free curation stores the documented window and its sourc
   const dir = mkdtempSync(path.join(os.tmpdir(), "curate-opencode-free-sourcing-"));
   const file = path.join(dir, "user-models.json");
   const fixture = path.join(dir, "models.json");
-  const oxId = "x-preview-f-free";
+  // Ox Alpha used to stand in for the documented-window case here. It ships as
+  // a checked-in entry now, so curation refuses it as a candidate -- the point
+  // being tested is the sourcing, and Nemotron 3 Ultra Free carries the same
+  // shape (a published 1M window with a declared output limit) and is still
+  // reached through curation.
+  const oxId = "nemotron-3-ultra-free";
   const otherId = "mimo-v2.5-free";
   writeFileSync(fixture, JSON.stringify({ data: [{ id: oxId }, { id: otherId }] }));
   try {
@@ -702,9 +855,9 @@ test("scripted OpenCode Free curation stores the documented window and its sourc
     assert.equal(ox.contextWindow, 1_000_000);
     assert.equal(ox.autoCompact, 850_000);
     assert.equal(ox.description, curatedModelDescription("opencode-free", oxId));
-    // autoCompact has to leave room for the published 131,072 output limit, or
+    // autoCompact has to leave room for the id's published output limit, or
     // compaction never fires early enough to keep a completion inside the window.
-    assert.ok(ox.contextWindow - ox.autoCompact >= 131_072);
+    assert.ok(ox.contextWindow - ox.autoCompact >= curatedModelOutputLimit("opencode-free", oxId));
 
     const other = stored.models.find((model) => model.upstreamModel === otherId);
     assert.equal(other.contextWindow, 131072);

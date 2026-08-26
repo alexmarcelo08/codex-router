@@ -11,7 +11,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { NATIVE_CATALOG_PATH } from "./paths.mjs";
 import { nativeSessionAvailable } from "./codex-native-session.mjs";
-import { modelPickerSnapshot } from "./model-picker-state.mjs";
+import { MODEL_SLUG_ALIASES } from "./model-registry.mjs";
+import { migrateModelVisibility } from "./model-picker-state.mjs";
 import { readMultiAgentSettings } from "./multi-agent-state.mjs";
 import { selectedConfiguredListedModels } from "./provider-selection.mjs";
 import { applySubagentProofs, subagentProofSnapshot } from "./subagent-proofs.mjs";
@@ -62,7 +63,13 @@ export function nativeClientModels(nativeCatalogModels) {
 
 /** The routed models a published client should be offered, vision bridge included. */
 export function routedClientModels() {
-  const picker = modelPickerSnapshot();
+  // Catalog publication normally carries picker decisions across renamed
+  // slugs. DSH- or Gemini-only installs deliberately never run catalog.mjs,
+  // though, so their shared publisher must apply the same registry aliases
+  // before it evaluates the exact visibility allowlist.
+  const picker = migrateModelVisibility(
+    [...MODEL_SLUG_ALIASES].map(([from, to]) => ({ from, to })),
+  );
   const hidden = new Set(picker.hidden);
   const visible = new Set(picker.visible);
   // Keep every client on the same registry-certified capabilities. Local
@@ -78,11 +85,9 @@ export function routedClientModels() {
     { hidden, disabled: readMultiAgentSettings().disabled },
   );
   // Native GPT models are authorized by a ChatGPT session rather than an API
-  // key. A published client carries none of its own -- but this machine is
-  // signed in to Codex, and the router relays that session for a caller that
-  // brought nothing (see `codex-native-session.mjs`). So they are publishable
-  // exactly while that fallback can supply one, and withheld the moment it
-  // cannot.
+  // key. A published client carries none of its own, so they are publishable
+  // only after this user authorizes the shared local router plane and while the
+  // signed-in Codex session remains usable (see `codex-native-session.mjs`).
   const native = nativeSessionAvailable() ? nativeClientModels(readNativeCatalogModels()) : [];
   // The vision engine still resolves over routed candidates only. A native
   // engine is spent per-caller, and `vision-engines` wants each call site to

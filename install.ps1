@@ -314,10 +314,24 @@ try {
     Write-Host "LiteLLM already matches the pinned versions; skipping the Python install."
   } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
     $VenvHomeOk = (& node src/install-plan.mjs venv-home-ok 2>$null | Select-Object -Last 1) -eq "ok"
+    $VenvRuntimeOk = $false
+    if (Test-Path $Python) {
+      try {
+        & $Python -I -c "import encodings, sys" 2>$null | Out-Null
+        $VenvRuntimeOk = $LASTEXITCODE -eq 0
+      } catch {
+        $VenvRuntimeOk = $false
+      }
+    }
     if (-not (Test-Path $Python)) {
-      & uv venv --python 3.12 .venv
+      if (Test-Path ".venv") {
+        Write-Host "The virtual environment's Python launcher is missing; recreating the venv."
+        & uv venv --clear --python 3.12 .venv
+      } else {
+        & uv venv --python 3.12 .venv
+      }
       if ($LASTEXITCODE -ne 0) { throw "uv could not create the Python environment." }
-    } elseif (-not $VenvHomeOk) {
+    } elseif (-not $VenvHomeOk -or -not $VenvRuntimeOk) {
       # A venv whose interpreter home was cleared (macOS wipes /private/tmp,
       # and installers that recorded a temporary Python as the venv home end
       # up with a dangling interpreter) must be recreated, not pip-installed
@@ -338,7 +352,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Recording the Python dependency state failed." }
   } else {
     $VenvHomeOk = (& node src/install-plan.mjs venv-home-ok 2>$null | Select-Object -Last 1) -eq "ok"
-    $RecreateVenv = -not $VenvHomeOk
+    $VenvRuntimeOk = $false
+    if (Test-Path $Python) {
+      try {
+        & $Python -I -c "import encodings, sys" 2>$null | Out-Null
+        $VenvRuntimeOk = $LASTEXITCODE -eq 0
+      } catch {
+        $VenvRuntimeOk = $false
+      }
+    }
+    $RecreateVenv = -not $VenvHomeOk -or -not $VenvRuntimeOk
     if (Get-Command "py" -ErrorAction SilentlyContinue) {
       & py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
       if ($LASTEXITCODE -ne 0) { throw "Python 3.10 or newer is required." }
@@ -449,14 +472,14 @@ try {
   # `exit` would otherwise terminate this installer before the status could be
   # checked. This remains best effort, matching bin/install: an optional Rust
   # or Electron build failure must not roll back a healthy router update.
-  if ($TrayWasInstalled) {
+  if ($TrayWasInstalled -and $env:CODEX_ROUTER_DEFER_TRAY_REBUILD -ne "1") {
     $SavedRouterTarget = $env:MODEL_ROUTER_TARGET
     try {
       # The tray belongs to the shared router plane. codex-router.ps1 is the
       # Windows companion entry point and deliberately accepts only its Codex
       # spelling, even when this update was initiated for DSH or Gemini CLI.
       $env:MODEL_ROUTER_TARGET = "codex"
-      & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ScriptDirectory "codex-router.ps1") tray install
+      & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ScriptDirectory "codex-router.ps1") tray install --preserve-window
       $TrayExitCode = $LASTEXITCODE
       if ($TrayExitCode -ne 0) {
         Write-Warning "Desktop companion refresh failed with exit code $TrayExitCode; the router is installed. Run '.\codex-router.ps1 tray repair' if an earlier elevated install owns the task."
@@ -466,6 +489,13 @@ try {
     } finally {
       $env:MODEL_ROUTER_TARGET = $SavedRouterTarget
     }
+  } elseif ($TrayWasInstalled) {
+    # A Control Center cannot synchronously rebuild the executable that is
+    # running this installer: stop/drain waits for the caller's mutation, while
+    # the caller waits for install.ps1. The UI launches a detached `control tray
+    # refresh` after its mutation settles; that command rechecks tray-plan and
+    # does nothing when this install did not make the package stale.
+    Write-Output "Desktop companion refresh deferred until the Control Center mutation completes."
   }
 
   # Managed Codex skills are an integration convenience, not part of router
