@@ -4632,7 +4632,7 @@ test("API forwarder routes Command Code chat and Messages surfaces", async () =>
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "commandcode-deepseek-v4-flash",
+          model: "commandcode-api-deepseek-v4-flash",
           messages: [{ role: "user", content: "test" }],
         }),
       },
@@ -4655,7 +4655,7 @@ test("API forwarder routes Command Code chat and Messages surfaces", async () =>
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "commandcode-messages-claude-opus-4-8",
+          model: "commandcode-api-messages-claude-opus-4-8",
           max_tokens: 64,
           messages: [{ role: "user", content: "test" }],
         }),
@@ -8143,7 +8143,7 @@ test("API forwarder clamps Ox Alpha efforts onto the ladder the model accepts", 
       // Every credentialed reseller reaches its own id and credential while
       // sharing the model's ladder normalization.
       ["openrouter-ox-alpha", "stealth/ox-alpha", "TEST_OPENROUTER_OX_KEY", "xhigh", "max"],
-      ["commandcode-ox-alpha", "stealth/ox-alpha", "TEST_COMMANDCODE_OX_KEY", "medium", "low"],
+      ["commandcode-api-ox-alpha", "stealth/ox-alpha", "TEST_COMMANDCODE_OX_KEY", "medium", "low"],
       ["nousresearch-ox-alpha", "stealth/ox-alpha", "TEST_NOUS_OX_KEY", "minimal", "low"],
       ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "max", "max"],
       ["venice-ox-alpha", "stealth-ox-alpha", "TEST_VENICE_OX_KEY", "xhigh", "max"],
@@ -8196,7 +8196,7 @@ test("API forwarder clamps Ox Alpha efforts onto the ladder the model accepts", 
     for (const model of [
       "opencode-go-ox-alpha",
       "openrouter-ox-alpha",
-      "commandcode-ox-alpha",
+      "commandcode-api-ox-alpha",
       "nousresearch-ox-alpha",
       "venice-ox-alpha",
     ]) {

@@ -50,6 +50,29 @@
         "cliSession": true,
         "label": "Command Code CLI OAuth session"
       }
+    },
+    {
+      "id": "commandcode-api-messages",
+      "displayName": "Command Code Messages (API)",
+      "kind": "openai-compatible",
+      "ownedBy": "commandcode",
+      "variantOf": "commandcode-api",
+      "protocol": "anthropic",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "baseUrlEnv": "COMMANDCODE_BASE_URL",
+      "planNote": "Uses a plain Command Code API key against /provider/v1/messages. Requires a plan with Provider API access (GOAT/Pro/Max/Team/Provider); Go plans are refused.",
+      "credential": {
+        "environment": [
+          "COMMAND_CODE_API_KEY",
+          "COMMANDCODE_API_KEY"
+        ],
+        "file": "commandcode-api-key.secret",
+        "legacyFiles": [],
+        "keychainServices": [
+          "codex-router-commandcode"
+        ],
+        "prompt": "Command Code API key"
+      }
     }
   ]
 }

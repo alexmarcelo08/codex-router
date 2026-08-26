@@ -770,12 +770,16 @@ async function zaiCodingAccount(fetchImpl) {
 
 // The credits route is not in the public docs, so any failure degrades to the
 // Studio link and observed router traffic instead of an error state.
-async function commandCodeAccount(fetchImpl) {
-  const provider = PROVIDERS.get("commandcode");
+async function commandCodeAccount(fetchImpl, providerId) {
+  // The OAuth CLI session has no Provider API quota to poll; only the
+  // API-key sibling reports plan credits. Every Command Code surface has the
+  // same credits route and dashboard.
+  const provider = PROVIDERS.get(providerId);
+  if (!provider || provider.credential?.cliSession === true) return undefined;
   const credential = resolveProviderCredential(provider);
   if (!credential) return { status: "not-configured", source: "official-api", metrics: [] };
   const fallback = (message) => ({
-    ...withHeaderQuota("commandcode", localOnly(message)),
+    ...withHeaderQuota(providerId, localOnly(message)),
     dashboardUrl: COMMANDCODE_DASHBOARD_URL,
   });
   const baseURL = (process.env[provider.baseUrlEnv] || provider.baseUrl).replace(/\/+$/, "");
@@ -966,7 +970,10 @@ async function accountUsageFor(providerId, fetchImpl) {
           }
         : { status: "not-configured", source: "official-api", metrics: [] };
     }
-    if (providerId === "commandcode") return await commandCodeAccount(fetchImpl);
+    if (providerId === "commandcode" || providerId === "commandcode-api") {
+      const account = await commandCodeAccount(fetchImpl, providerId);
+      if (account) return account;
+    }
     if (providerId === "venice") return await veniceAccount(fetchImpl);
     if (providerId === "openrouter") return await openRouterAccount(fetchImpl);
     if (providerId === "nousresearch") {

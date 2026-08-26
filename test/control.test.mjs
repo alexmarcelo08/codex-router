@@ -990,6 +990,7 @@ test("aggregate overview exposes the router-owned catalog separately from client
       .map((model) => [model.slug, model.available])
       .sort(([left], [right]) => left.localeCompare(right));
     assert.deepEqual(oxAlphaRoutes, [
+      ["commandcode-api/ox-alpha", false],
       ["commandcode/ox-alpha", false],
       ["nousresearch/ox-alpha", false],
       ["opencode-free/ox-alpha", true],

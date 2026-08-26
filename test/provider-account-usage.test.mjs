@@ -238,7 +238,7 @@ test("Command Code usage reads plan windows from the billing credits API", async
   process.env.COMMAND_CODE_API_KEY = "TEST_COMMANDCODE_USAGE_KEY";
   try {
     const snapshot = await providerAccountUsageSnapshot({
-      providerIds: ["commandcode"],
+      providerIds: ["commandcode-api"],
       fetchImpl: async (url, options) => {
         assert.equal(url, "https://api.commandcode.ai/alpha/billing/credits");
         assert.equal(options.headers.Authorization, "Bearer TEST_COMMANDCODE_USAGE_KEY");
@@ -252,9 +252,9 @@ test("Command Code usage reads plan windows from the billing credits API", async
         }));
       },
     });
-    assert.equal(snapshot.commandcode.status, "available");
-    assert.equal(snapshot.commandcode.dashboardUrl, "https://commandcode.ai/studio");
-    assert.deepEqual(snapshot.commandcode.metrics, [
+    assert.equal(snapshot["commandcode-api"].status, "available");
+    assert.equal(snapshot["commandcode-api"].dashboardUrl, "https://commandcode.ai/studio");
+    assert.deepEqual(snapshot["commandcode-api"].metrics, [
       {
         kind: "balance",
         label: "Plan credits",
@@ -297,11 +297,11 @@ test("Command Code usage degrades to the Studio link when the credits API fails"
   process.env.COMMAND_CODE_API_KEY = "TEST_COMMANDCODE_USAGE_KEY";
   try {
     const snapshot = await providerAccountUsageSnapshot({
-      providerIds: ["commandcode"],
+      providerIds: ["commandcode-api"],
       fetchImpl: async () => new Response("nope", { status: 503 }),
     });
-    assert.equal(snapshot.commandcode.status, "local-only");
-    assert.equal(snapshot.commandcode.dashboardUrl, "https://commandcode.ai/studio");
+    assert.equal(snapshot["commandcode-api"].status, "local-only");
+    assert.equal(snapshot["commandcode-api"].dashboardUrl, "https://commandcode.ai/studio");
   } finally {
     delete process.env.COMMAND_CODE_API_KEY;
   }
@@ -311,16 +311,16 @@ test("Command Code usage avoids the billing API for a custom endpoint", async ()
   delete process.env.COMMAND_CODE_API_KEY;
   delete process.env.COMMANDCODE_API_KEY;
   process.env.COMMAND_CODE_API_KEY = "TEST_COMMANDCODE_CUSTOM_KEY";
-  process.env.COMMANDCODE_BASE_URL = "https://example.test/provider/v1";
-  try {
-    const snapshot = await providerAccountUsageSnapshot({
-      providerIds: ["commandcode"],
+    process.env.COMMANDCODE_BASE_URL = "https://example.test/provider/v1";
+    try {
+      const snapshot = await providerAccountUsageSnapshot({
+      providerIds: ["commandcode-api"],
       fetchImpl: async () => {
         throw new Error("custom Command Code endpoints must not trigger billing API calls");
       },
     });
-    assert.equal(snapshot.commandcode.status, "local-only");
-    assert.match(snapshot.commandcode.message, /custom Command Code endpoint/);
+    assert.equal(snapshot["commandcode-api"].status, "local-only");
+    assert.match(snapshot["commandcode-api"].message, /custom Command Code endpoint/);
   } finally {
     delete process.env.COMMAND_CODE_API_KEY;
     delete process.env.COMMANDCODE_BASE_URL;
