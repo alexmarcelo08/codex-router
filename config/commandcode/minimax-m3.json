@@ -7,8 +7,8 @@
       "upstreamModel": "MiniMaxAI/MiniMax-M3",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "MiniMax M3 (Command Code)",
-      "description": "MiniMax M3 through the Command Code Provider API.",
+      "displayName": "MiniMax M3 (Command Code OAuth)",
+      "description": "MiniMax M3 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 111,
       "defaultEffort": "high",
       "reasoningLevels": [

@@ -7,8 +7,8 @@
       "upstreamModel": "claude-opus-4-8",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Opus 4.8 (Command Code)",
-      "description": "Claude Opus 4.8 through the Command Code Provider API using the Messages API.",
+      "displayName": "Claude Opus 4.8 (Command Code OAuth)",
+      "description": "Claude Opus 4.8 through the Command Code Provider API using the Messages API via the CLI OAuth session (/alpha/generate).",
       "priority": 132,
       "defaultEffort": "high",
       "reasoningLevels": [

@@ -7,8 +7,8 @@
       "upstreamModel": "MiniMaxAI/MiniMax-M2.7",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "MiniMax M2.7 (Command Code)",
-      "description": "MiniMax M2.7 through the Command Code Provider API.",
+      "displayName": "MiniMax M2.7 (Command Code OAuth)",
+      "description": "MiniMax M2.7 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 112,
       "defaultEffort": "high",
       "reasoningLevels": [

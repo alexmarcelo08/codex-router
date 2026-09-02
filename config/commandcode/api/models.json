@@ -823,6 +823,29 @@
       "compHash": "commandcode-api-qwen3-8-max-v1"
     },
     {
+      "slug": "commandcode-api/qwen3.8-flash",
+      "gatewayModel": "commandcode-api-qwen3-8-flash",
+      "upstreamModel": "Qwen/Qwen3.8-Flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "Qwen3.8 Flash (Command Code API)",
+      "description": "Qwen3.8 Flash through the Command Code API.",
+      "priority": 111,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-qwen3-8-flash-v1"
+    },
+    {
       "slug": "commandcode-api/step-3.7-flash",
       "gatewayModel": "commandcode-api-step-3-7-flash",
       "upstreamModel": "stepfun/Step-3.7-Flash",
@@ -844,6 +867,61 @@
         "text"
       ],
       "compHash": "commandcode-api-step-3-7-flash-v1"
+    },
+    {
+      "slug": "commandcode-api/deepseek/deepseek-v4-flash-vision-exp",
+      "gatewayModel": "commandcode-api-deepseek-deepseek-v4-flash-vision-exp",
+      "upstreamModel": "deepseek/deepseek-v4-flash-vision-exp",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "DeepSeek V4 Flash Vision Exp (API)",
+      "description": "DeepSeek V4 Flash Vision Exp through the Command Code API.",
+      "priority": 101,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 850000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "compHash": "commandcode-api-deepseek-deepseek-v4-flash-vision-exp-v1"
+    },
+    {
+      "slug": "commandcode-api/glm-5.3-flash",
+      "gatewayModel": "commandcode-api-glm-5-3-flash",
+      "upstreamModel": "z-ai/glm-5.3-flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "GLM-5.3 Flash (Command Code API)",
+      "description": "GLM-5.3 Flash through the Command Code API.",
+      "priority": 104,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1048576,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "commandcode-api-glm-5-3-flash-v1"
     }
   ]
 }

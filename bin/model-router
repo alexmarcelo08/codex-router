@@ -64,7 +64,7 @@ case "$target" in
 esac
 
 case "$command" in
-  setup|install|doctor|status|provider-key|providers|enable|disable|chatgpt-session|multi-agent|media|panel|local-mlx|uninstall|smoke-test|start|stop|update|rollback|subagent-preset|shim) ;;
+  setup|install|doctor|status|provider-key|providers|enable|disable|chatgpt-session|multi-agent|media|panel|local-mlx|uninstall|smoke-test|start|stop|update|rollback|subagent-preset|shim|sync-models) ;;
   *) echo "Unknown command: $command" >&2; usage >&2; exit 2 ;;
 esac
 

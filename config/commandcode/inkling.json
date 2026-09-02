@@ -7,8 +7,8 @@
       "upstreamModel": "thinkingmachines/inkling",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Inkling (Command Code)",
-      "description": "Inkling through the Command Code Provider API.",
+      "displayName": "Inkling (Command Code OAuth)",
+      "description": "Inkling through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 127,
       "defaultEffort": "high",
       "reasoningLevels": [

@@ -7,8 +7,8 @@
       "upstreamModel": "zai-org/GLM-5.2",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "GLM-5.2 (Command Code)",
-      "description": "GLM-5.2 through the Command Code Provider API.",
+      "displayName": "GLM-5.2 (Command Code OAuth)",
+      "description": "GLM-5.2 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 102,
       "defaultEffort": "max",
       "reasoningLevels": [

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Check, ChevronDown, Filter, KeyRound, Link2, LogIn, MoreHorizontal, Plus, SearchX, ShieldCheck, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Filter, KeyRound, Link2, LogIn, MoreHorizontal, Plus, RefreshCw, SearchX, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge, Button, CatalogSkeleton, Dialog, EmptyState, PageHeader, SearchField, SkeletonBlock, Toggle } from "../components";
 import { BrandLogo, ProviderLogo, brandForModel } from "../provider-branding";
 import { formatContext, formatDateTime } from "../lib";
@@ -570,6 +570,17 @@ export function ModelsPage({ target, catalog, setup, usage, api, refreshing, onR
           }}
           onKey={(entry) => entry.setup && setCredentialProvider(entry.setup)}
           onRemove={(entry) => entry.setup && setRemoveProvider(entry.setup)}
+          onChangeAccount={(entry) => {
+            if (!api || !entry.setup) return;
+            void runProviderCredentialAction(entry.setup, "Change Command Code account", async () => {
+              await api.logoutCommandCode();
+              await api.connectProvider(entry.id);
+            });
+          }}
+          onLogout={(entry) => {
+            if (!api || !entry.setup) return;
+            void runProviderCredentialAction(entry.setup, "Log out of Command Code", () => api.logoutCommandCode());
+          }}
         />
 
         <section className="panel-section pm-model-catalog" id="model-catalog-controls">
@@ -784,6 +795,8 @@ function ConnectionsBar({
   onSignIn,
   onKey,
   onRemove,
+  onChangeAccount,
+  onLogout,
 }: {
   directory: ProviderDirectoryEntry[];
   enabledProviders: Set<string>;
@@ -800,6 +813,8 @@ function ConnectionsBar({
   onSignIn: (entry: ProviderDirectoryEntry) => void;
   onKey: (entry: ProviderDirectoryEntry) => void;
   onRemove: (entry: ProviderDirectoryEntry) => void;
+  onChangeAccount: (entry: ProviderDirectoryEntry) => void;
+  onLogout: (entry: ProviderDirectoryEntry) => void;
 }) {
   const barRef = useRef<HTMLElement | null>(null);
   const setConnectMenuOpen = onConnectMenuOpen;
@@ -858,6 +873,8 @@ function ConnectionsBar({
                 onSignIn={() => onSignIn(entry)}
                 onKey={() => onKey(entry)}
                 onRemove={() => onRemove(entry)}
+                onChangeAccount={() => onChangeAccount(entry)}
+                onLogout={() => onLogout(entry)}
               />
             ) : null}
           </div>
@@ -914,6 +931,8 @@ function ProviderMenu({
   onSignIn,
   onKey,
   onRemove,
+  onChangeAccount,
+  onLogout,
 }: {
   entry: ProviderDirectoryEntry;
   usage?: NonNullable<ProviderUsageSnapshot["providers"]>[number];
@@ -924,6 +943,8 @@ function ProviderMenu({
   onSignIn: () => void;
   onKey: () => void;
   onRemove: () => void;
+  onChangeAccount: () => void;
+  onLogout: () => void;
 }) {
   const setup = entry.setup;
   return (
@@ -960,6 +981,25 @@ function ProviderMenu({
               >
                 <LogIn aria-hidden size={14} strokeWidth={1.7} />
                 {setup.configured ? "Sign in again" : "Open sign-in"}
+              </Button>
+            ) : null}
+            {setup.kind === "oauth" && entry.id === "commandcode" && setup.configured ? (
+              <Button
+                variant="ghost"
+                disabled={!apiAvailable || platform !== "darwin"}
+                title={platform === "darwin" ? undefined : "Open the provider CLI in your own terminal on Windows or Linux."}
+                onClick={onChangeAccount}
+              >
+                <RefreshCw aria-hidden size={14} strokeWidth={1.7} /> Change account
+              </Button>
+            ) : null}
+            {setup.kind === "oauth" && entry.id === "commandcode" && setup.configured ? (
+              <Button
+                variant="ghost"
+                disabled={!apiAvailable}
+                onClick={onLogout}
+              >
+                <Trash2 aria-hidden size={14} strokeWidth={1.7} /> Log out
               </Button>
             ) : null}
             {setup.kind === "api" && entry.id !== "local" ? (

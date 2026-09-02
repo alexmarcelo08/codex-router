@@ -2,14 +2,14 @@
   "version": 1,
   "models": [
     {
-      "slug": "commandcode/deepseek-v4-pro",
-      "gatewayModel": "commandcode-deepseek-v4-pro",
-      "upstreamModel": "deepseek/deepseek-v4-pro",
+      "slug": "commandcode/glm-5.3-flash",
+      "gatewayModel": "commandcode-glm-5-3-flash",
+      "upstreamModel": "z-ai/glm-5.3-flash",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "DeepSeek V4 Pro (Command Code OAuth)",
-      "description": "DeepSeek V4 Pro through the Command Code CLI OAuth session (/alpha/generate).",
-      "priority": 101,
+      "displayName": "GLM-5.3 Flash (Command Code OAuth)",
+      "description": "GLM-5.3 Flash through the Command Code CLI OAuth session (/alpha/generate).",
+      "priority": 104,
       "defaultEffort": "high",
       "reasoningLevels": [
         {
@@ -21,12 +21,12 @@
           "description": "Maximum reasoning depth"
         }
       ],
-      "contextWindow": 1000000,
+      "contextWindow": 1048576,
       "autoCompact": 900000,
       "inputModalities": [
         "text"
       ],
-      "compHash": "commandcode-deepseek-v4-pro-v1"
+      "compHash": "commandcode-glm-5-3-flash-v1"
     }
   ]
 }

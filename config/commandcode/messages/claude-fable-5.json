@@ -7,8 +7,8 @@
       "upstreamModel": "claude-fable-5",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Fable 5 (Command Code)",
-      "description": "Claude Fable 5 through the Command Code Provider API using the Messages API.",
+      "displayName": "Claude Fable 5 (Command Code OAuth)",
+      "description": "Claude Fable 5 through the Command Code Provider API using the Messages API via the CLI OAuth session (/alpha/generate).",
       "priority": 133,
       "defaultEffort": "high",
       "reasoningLevels": [

@@ -7,8 +7,8 @@
       "upstreamModel": "gpt-5.5",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "GPT 5.5 (Command Code)",
-      "description": "GPT 5.5 through the Command Code Provider API.",
+      "displayName": "GPT 5.5 (Command Code OAuth)",
+      "description": "GPT 5.5 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 119,
       "defaultEffort": "medium",
       "reasoningLevels": [

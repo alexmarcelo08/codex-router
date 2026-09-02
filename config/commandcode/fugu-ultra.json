@@ -7,8 +7,8 @@
       "upstreamModel": "sakana/fugu-ultra",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Fugu Ultra (Command Code)",
-      "description": "Fugu Ultra through the Command Code Provider API.",
+      "displayName": "Fugu Ultra (Command Code OAuth)",
+      "description": "Fugu Ultra through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 126,
       "defaultEffort": "high",
       "reasoningLevels": [

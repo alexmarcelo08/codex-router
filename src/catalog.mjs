@@ -474,6 +474,30 @@ function identityName(model) {
   return bare || "an external model";
 }
 
+// The Codex picker row truncates long labels, so keep the route source but
+// compress long provider suffixes into a short tag that still distinguishes
+// the two Command Code routes (OAuth vs API). Display-only: slugs, routing,
+// and persisted selection are untouched.
+function pickerDisplayName(model) {
+  let name = String(model.displayName || "").trim();
+  if (!name) return String(model.slug);
+  const suffixTags = [
+    [/ \(Command Code OAuth\)$/i, " (CC OAuth)"],
+    [/ \(Command Code API\)$/i, " (CC API)"],
+    [/ \(Command Code\)$/i, " (CC)"],
+    [/ \(opencode Go\)$/i, " (Go)"],
+  ];
+  for (const [pattern, tag] of suffixTags) {
+    name = name.replace(pattern, tag);
+  }
+  const curated = name.match(/^(.*?)\s+\(curated\)$/);
+  if (curated) {
+    const tail = curated[1].split("/").at(-1) || curated[1];
+    name = tail.replace(/:free$/, "").trim();
+  }
+  return name || String(model.slug);
+}
+
 function rewriteIdentity(text, model) {
   if (typeof text !== "string" || !text) return text;
   const name = identityName(model);
@@ -538,7 +562,7 @@ export function routedModel(template, model, behaviorTemplate = template) {
     base_instructions: behaviorInstructions,
     model_messages: behaviorModelMessages,
     slug: model.slug,
-    display_name: model.displayName,
+    display_name: pickerDisplayName(model),
     description: model.description,
     priority: model.priority,
     visibility: "list",

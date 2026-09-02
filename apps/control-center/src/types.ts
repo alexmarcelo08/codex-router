@@ -608,6 +608,7 @@ export interface RouterControlApi {
   connectProvider(provider: string): Promise<unknown>;
   saveProviderCredential(provider: string, credential: string): Promise<unknown>;
   removeProviderCredential(provider: string): Promise<unknown>;
+  logoutCommandCode(): Promise<unknown>;
   setSubagentMode(mode: "all" | "selected" | "proven"): Promise<unknown>;
   setSubagentModel(slug: string, enabled: boolean): Promise<unknown>;
   setSubagentEffort(slug: string, effort: string): Promise<unknown>;

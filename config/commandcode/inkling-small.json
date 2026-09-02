@@ -7,8 +7,8 @@
       "upstreamModel": "thinkingmachines/inkling-small",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Inkling Small (Command Code)",
-      "description": "Inkling Small through the Command Code Provider API.",
+      "displayName": "Inkling Small (Command Code OAuth)",
+      "description": "Inkling Small through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 128,
       "defaultEffort": "high",
       "reasoningLevels": [

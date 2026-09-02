@@ -581,6 +581,7 @@ CLI session.
 | GLM-5.2 (Command Code) | `commandcode/glm-5.2` |
 | Kimi K3 (Command Code) | `commandcode/kimi-k3` |
 | Kimi K2.7 Code (Command Code) | `commandcode/kimi-k2.7-code` |
+| Qwen3.8 Flash (Command Code) | `commandcode/qwen3.8-flash` |
 | Qwen3.8 Max (Command Code) | `commandcode/qwen3.8-max` |
 | Qwen3.7 Max (Command Code) | `commandcode/qwen3.7-max` |
 | Qwen3.7 Plus (Command Code) | `commandcode/qwen3.7-plus` |
@@ -608,6 +609,11 @@ it, so a redirected provider stays coherent. The tray reports the plan's
 remaining credits and its 5-hour and weekly windows from the same undocumented
 billing route the official CLI polls, and links to Command Code Studio when
 that route is unavailable.
+
+To auto-add newly advertised models and prune locally curated ones the provider
+no longer serves, run `./bin/sync-models commandcode` (add `--prune` to also
+remove stale curated entries). The command never touches checked-in registry
+models and reports each model it would add or drop before applying.
 
 ### Ox Alpha
 

@@ -7,8 +7,8 @@
       "upstreamModel": "stealth/ox-alpha",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Ox Alpha (Command Code)",
-      "description": "Ox Alpha through the Command Code Provider API. Free during the stealth preview; the preview and its limits can end without notice.",
+      "displayName": "Ox Alpha (Command Code OAuth)",
+      "description": "Ox Alpha through the Command Code CLI OAuth session (/alpha/generate). Free during the stealth preview; the preview and its limits can end without notice.",
       "priority": 92,
       "defaultEffort": "max",
       "reasoningLevels": [

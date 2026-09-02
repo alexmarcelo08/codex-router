@@ -7,8 +7,8 @@
       "upstreamModel": "xai/grok-4.6",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Grok 4.6 (Command Code)",
-      "description": "Grok 4.6 through the Command Code Provider API.",
+      "displayName": "Grok 4.6 (Command Code OAuth)",
+      "description": "Grok 4.6 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 114,
       "defaultEffort": "high",
       "reasoningLevels": [

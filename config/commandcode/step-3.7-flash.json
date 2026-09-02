@@ -7,8 +7,8 @@
       "upstreamModel": "stepfun/Step-3.7-Flash",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Step 3.7 Flash (Command Code)",
-      "description": "Step 3.7 Flash through the Command Code Provider API.",
+      "displayName": "Step 3.7 Flash (Command Code OAuth)",
+      "description": "Step 3.7 Flash through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 123,
       "defaultEffort": "high",
       "reasoningLevels": [

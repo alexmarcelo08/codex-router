@@ -7,8 +7,8 @@
       "upstreamModel": "google/gemini-3.5-flash",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Gemini 3.5 Flash (Command Code)",
-      "description": "Gemini 3.5 Flash through the Command Code Provider API.",
+      "displayName": "Gemini 3.5 Flash (Command Code OAuth)",
+      "description": "Gemini 3.5 Flash through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 121,
       "defaultEffort": "high",
       "reasoningLevels": [

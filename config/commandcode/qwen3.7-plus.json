@@ -7,8 +7,8 @@
       "upstreamModel": "Qwen/Qwen3.7-Plus",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Qwen3.7 Plus (Command Code)",
-      "description": "Qwen3.7 Plus through the Command Code Provider API.",
+      "displayName": "Qwen3.7 Plus (Command Code OAuth)",
+      "description": "Qwen3.7 Plus through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 109,
       "defaultEffort": "high",
       "reasoningLevels": [

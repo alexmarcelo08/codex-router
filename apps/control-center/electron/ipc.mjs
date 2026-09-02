@@ -72,6 +72,7 @@ const OAUTH_LOGIN_COMMANDS = Object.freeze({
   "kimi-oauth": { executable: "kimi", args: ["login"] },
   "grok-oauth": { executable: "grok", args: ["login", "--oauth"] },
   "devin-cli": { executable: "devin", args: ["auth", "login"] },
+  "commandcode": { executable: "command-code", args: ["login"] },
 });
 const WINDOWS_EXECUTABLE_EXTENSIONS = [".exe", ".com", ".cmd", ".bat"];
 
@@ -855,6 +856,16 @@ export function registerIpcHandlers({
     // pre-disable/apply here would reopen the inter-process race and publish
     // the model list twice.
     return runJson(["credential", id, "--remove"], {
+      timeoutMs: CATALOG_MUTATION_TIMEOUT_MS,
+    });
+  });
+
+  // Command Code's OAuth session is owned by the official CLI, so the generic
+  // API-credential removal cannot reach it. This drives `control
+  // commandcode-logout`, which runs `command-code logout` and then withdraws
+  // the provider so no model still routes to a dead session.
+  handleAction("logoutCommandCode", async () => {
+    return runJson(["commandcode-logout"], {
       timeoutMs: CATALOG_MUTATION_TIMEOUT_MS,
     });
   });

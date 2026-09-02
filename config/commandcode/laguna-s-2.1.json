@@ -7,8 +7,8 @@
       "upstreamModel": "poolside/laguna-s-2.1-free",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Laguna S 2.1 (Command Code)",
-      "description": "Laguna S 2.1 through the Command Code Provider API.",
+      "displayName": "Laguna S 2.1 (Command Code OAuth)",
+      "description": "Laguna S 2.1 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 129,
       "defaultEffort": "high",
       "reasoningLevels": [

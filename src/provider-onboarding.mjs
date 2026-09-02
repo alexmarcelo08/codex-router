@@ -356,6 +356,45 @@ export async function removeApiCredential(providerId) {
   };
 }
 
+// Command Code's OAuth session is owned by the official CLI, not by a
+// router-managed file. The generic credential removal cannot reach it --
+// `credentialPaths` returns [] for a cliSession provider -- so a real logout
+// has to drive the CLI's own `logout`, then withdraw the provider from the
+// router so no model still routes to a dead session.
+export async function logoutCommandCode() {
+  const provider = PROVIDERS.get("commandcode");
+  const cliPath = oauthCliPath("commandcode");
+  let cliRan = false;
+  let cliMessage;
+  if (cliPath) {
+    try {
+      const result = spawnSync(cliPath, ["logout"], { encoding: "utf8" });
+      cliRan = true;
+      const stdout = String(result?.stdout || "").trim();
+      const stderr = String(result?.stderr || "").trim();
+      cliMessage = stdout || stderr || undefined;
+      if (result && result.status !== 0) {
+        cliMessage = `command-code logout exited ${result.status}: ${cliMessage || "unknown error"}`;
+      }
+    } catch (error) {
+      cliMessage = `command-code logout failed: ${error?.message || String(error)}`;
+    }
+  } else {
+    cliMessage = "Command Code CLI not found; the OAuth session must be cleared manually.";
+  }
+  // Withdraw the provider regardless so the router stops advertising its models.
+  disableProvider("commandcode");
+  const status = commandCodeOAuthStatus();
+  return {
+    provider: "commandcode",
+    displayName: provider?.displayName || "Command Code OAuth",
+    cliRan,
+    cliMessage,
+    stillConfigured: status.configured === true,
+    remainingSource: status.configured ? status.source : undefined,
+  };
+}
+
 // Catalog-only providers (gemini-api, openrouter, groq, ...) ship no
 // preselected models, so a stored key still leaves the picker empty. Callers
 // use this to name the curation step instead of reporting a provider that

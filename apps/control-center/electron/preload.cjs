@@ -29,6 +29,7 @@ const routerControl = Object.freeze({
   connectProvider: (providerId) => call("connectProvider", { providerId }),
   saveProviderCredential: (providerId, credential) => call("saveProviderCredential", { providerId, credential }),
   removeProviderCredential: (providerId) => call("removeProviderCredential", { providerId }),
+  logoutCommandCode: () => call("logoutCommandCode", {}),
   setSubagentMode: (mode) => call("setSubagentMode", { mode }),
   setSubagentModel: (slug, enabled) => call("setSubagentModel", { slug, enabled }),
   setSubagentEffort: (slug, effort) => call("setSubagentEffort", { slug, effort }),

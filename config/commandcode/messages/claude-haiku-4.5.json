@@ -7,8 +7,8 @@
       "upstreamModel": "claude-haiku-4-5-20251001",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Haiku 4.5 (Command Code)",
-      "description": "Claude Haiku 4.5 through the Command Code Provider API using the Messages API.",
+      "displayName": "Claude Haiku 4.5 (Command Code OAuth)",
+      "description": "Claude Haiku 4.5 through the Command Code Provider API using the Messages API via the CLI OAuth session (/alpha/generate).",
       "priority": 134,
       "defaultEffort": "high",
       "reasoningLevels": [

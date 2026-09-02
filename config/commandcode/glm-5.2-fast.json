@@ -7,8 +7,8 @@
       "upstreamModel": "zai-org/GLM-5.2-Fast",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "GLM-5.2 Fast (Command Code)",
-      "description": "GLM-5.2 Fast through the Command Code Provider API.",
+      "displayName": "GLM-5.2 Fast (Command Code OAuth)",
+      "description": "GLM-5.2 Fast through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 103,
       "defaultEffort": "high",
       "reasoningLevels": [

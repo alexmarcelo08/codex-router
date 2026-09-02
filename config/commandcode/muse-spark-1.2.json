@@ -7,8 +7,8 @@
       "upstreamModel": "meta/muse-spark-1.2",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Muse Spark 1.2 (Command Code)",
-      "description": "Muse Spark 1.2 through the Command Code Provider API.",
+      "displayName": "Muse Spark 1.2 (Command Code OAuth)",
+      "description": "Muse Spark 1.2 through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 124,
       "defaultEffort": "high",
       "reasoningLevels": [

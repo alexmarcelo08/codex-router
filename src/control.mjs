@@ -2779,6 +2779,11 @@ if (args.includes("--probe")) {
 } else if (args[0] === "reauth") {
   if (!args[1]) throw new Error("Usage: control reauth <oauth-provider>");
   await loginProvider(args[1]);
+} else if (args[0] === "commandcode-logout") {
+  const { logoutCommandCode } = await import("./provider-onboarding.mjs");
+  const { providerOnboardingSnapshot } = await import("./provider-onboarding.mjs");
+  await logoutCommandCode();
+  process.stdout.write(`${JSON.stringify(providerOnboardingSnapshot())}\n`);
 } else if (args[0] === "catalog-cache") {
   if (args[1] !== "invalidate" || !args[2]) {
     throw new Error("Usage: control catalog-cache invalidate <provider>");

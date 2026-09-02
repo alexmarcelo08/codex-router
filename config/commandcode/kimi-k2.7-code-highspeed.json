@@ -7,8 +7,8 @@
       "upstreamModel": "moonshotai/Kimi-K2.7-Code-Highspeed",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Kimi K2.7 Code HighSpeed (Command Code)",
-      "description": "Kimi K2.7 Code HighSpeed through the Command Code Provider API.",
+      "displayName": "Kimi K2.7 Code HighSpeed (Command Code OAuth)",
+      "description": "Kimi K2.7 Code HighSpeed through the Command Code CLI OAuth session (/alpha/generate).",
       "priority": 106,
       "defaultEffort": "high",
       "reasoningLevels": [
