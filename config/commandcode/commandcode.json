@@ -43,6 +43,33 @@
         ],
         "prompt": "Command Code API key"
       }
+    },
+    {
+      "id": "commandcode-oauth",
+      "displayName": "Command Code (CLI OAuth)",
+      "kind": "openai-compatible",
+      "ownedBy": "commandcode",
+      "commandCodeOAuth": true,
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "baseUrlEnv": "COMMANDCODE_BASE_URL",
+      "credential": {
+        "cliSession": true,
+        "label": "Command Code CLI OAuth session"
+      }
+    },
+    {
+      "id": "commandcode-oauth-messages",
+      "displayName": "Command Code Messages (CLI OAuth)",
+      "kind": "openai-compatible",
+      "ownedBy": "commandcode",
+      "commandCodeOAuth": true,
+      "protocol": "anthropic",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "baseUrlEnv": "COMMANDCODE_BASE_URL",
+      "credential": {
+        "cliSession": true,
+        "label": "Command Code CLI OAuth session"
+      }
     }
   ]
 }

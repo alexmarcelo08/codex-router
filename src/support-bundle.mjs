@@ -179,7 +179,11 @@ function knownLocalSecrets() {
     // nothing to redact for it.
     if (providerNeedsNoKey(provider)) continue;
     files.push(...credentialPaths(provider));
-    for (const name of provider.credential.environment) {
+    // A CLI-session provider keeps its secret in the vendor CLI's own auth
+    // file, not in a router-managed credential or environment variable, so
+    // there is no router-side secret to discover here.
+    if (provider.credential?.cliSession === true) continue;
+    for (const name of provider.credential?.environment || []) {
       const value = process.env[name]?.trim();
       if (value) values.add(value);
     }

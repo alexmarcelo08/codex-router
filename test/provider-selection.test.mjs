@@ -9,6 +9,7 @@ process.env.CODEX_HOME = path.join(testRoot, "codex");
 process.env.CODEX_ROUTER_STATE_DIR = path.join(testRoot, "state");
 process.env.KIMI_CODE_HOME = path.join(testRoot, "kimi-code");
 process.env.GROK_AUTH_PATH = path.join(testRoot, "grok", "auth.json");
+process.env.COMMANDCODE_AUTH_HOME = path.join(testRoot, "commandcode");
 process.env.DEVIN_CREDENTIALS_PATH = path.join(testRoot, "devin", "credentials.toml");
 const { PROVIDERS } = await import("../src/model-registry.mjs");
 // Clearing every registry-declared credential variable keeps the "no provider

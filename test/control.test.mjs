@@ -157,10 +157,14 @@ test("codex probe folds Command Code protocol variants into one provider family"
   const slice = probe("codex", ["commandcode"]);
   const family = slice.models.filter((m) => m.provider === "commandcode");
   assert.ok(family.length > 0 && family.every((m) => m.enabled));
-  assert.ok(!slice.models.some((m) => m.provider.startsWith("commandcode-")));
+  // The API-key protocol variant (Messages) shares its parent's credential and
+  // selection, so it folds into the same row. The OAuth surface is a different
+  // credential/account (CLI session, not a pasted API key), so it stays its own
+  // provider rather than being folded into the API-key family.
+  assert.ok(!slice.models.some((m) => m.provider === "commandcode-messages"));
   const providerIds = slice.providers.map((p) => p.id);
   assert.ok(providerIds.includes("commandcode"));
-  assert.ok(!providerIds.some((id) => id.startsWith("commandcode-")));
+  assert.ok(!providerIds.includes("commandcode-messages"));
 });
 
 test("codex probe exposes only privacy-safe recent usage events", () => {
@@ -1065,13 +1069,17 @@ test("aggregate overview exposes the router-owned catalog separately from client
       .filter((model) => model.displayName.startsWith("Ox Alpha") || model.slug.endsWith("/ox-alpha"))
       .map((model) => [model.slug, model.available])
       .sort(([left], [right]) => left.localeCompare(right));
-    assert.deepEqual(oxAlphaRoutes, []);
+    // The Command Code CLI OAuth surface legitimately serves ox-alpha through
+    // /alpha/generate, so it is the one known, available ox-alpha route. The
+    // withdrawn research routes (API-key commandcode, opencode-free, etc.) are
+    // absent, so only the OAuth-bearing slug appears.
+    assert.deepEqual(oxAlphaRoutes, [["commandcode-oauth/ox-alpha", true]]);
     assert.deepEqual(
       parsed.catalog.models
         .filter((model) => model.slug.endsWith("/ox-alpha"))
         .map((model) => model.slug),
-      [],
-      "withdrawn research routes must not enter the routable catalog",
+      ["commandcode-oauth/ox-alpha"],
+      "only the OAuth ox-alpha route may enter the routable catalog",
     );
     for (const slug of [
       "commandcode/ox-alpha",

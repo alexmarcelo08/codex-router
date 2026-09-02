@@ -1295,6 +1295,14 @@ async function handleRequest(request, response) {
   let commandCode = isCommandCodeProvider(normalized.provider)
     ? (() => {
         const id = canonicalProviderId(normalized.provider.id);
+        // The OAuth-session provider rides the CLI's own route, never the paid
+        // Provider API: that is exactly what the browser sign-in entitles it to,
+        // even on a Go plan. The API-key sibling stays on the documented endpoint
+        // and must not fall back, so a key whose plan lacks API access sees the
+        // gateway's real 403 instead of silently spending coding-plan credits.
+        if (normalized.provider.credential?.cliSession === true) {
+          return { id, route: "plan", recheck: false };
+        }
         return { id, ...commandCodeRoute(id, routedCredentialValue) };
       })()
     : undefined;

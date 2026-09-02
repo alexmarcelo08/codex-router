@@ -378,7 +378,7 @@ test("a platform with no supervisor says so instead of reporting success", () =>
 // route was knowing two separate incantations.
 test("the Windows CLI exposes tray as a first-class command", () => {
   const script = readFileSync(path.join(root, "codex-router.ps1"), "utf8");
-  assert.match(script, /"refresh-catalog", "media", "tray"/);
+  assert.match(script, /"refresh-catalog", "sync-models", "media", "tray"/);
   assert.match(script, /"tray" \{/);
   // Build only when the sources moved, then stamp it, then register.
   assert.match(script, /install-plan\.mjs"\) tray-plan/);

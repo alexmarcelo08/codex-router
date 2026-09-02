@@ -12,6 +12,7 @@ import { devinCliStatus } from "./devin-cli-status.mjs";
 import { grokOAuthStatus } from "./grok-oauth-status.mjs";
 import { antigravityOAuthStatus } from "./antigravity-oauth-status.mjs";
 import { removeAntigravityToken } from "./antigravity-oauth-session.mjs";
+import { commandCodeOAuthStatus } from "./commandcode-oauth.mjs";
 import { KIMI_CLI_NPM_PACKAGE } from "./kimi-oauth-onboarding.mjs";
 import { MODELS, PROVIDERS, providerNeedsNoKey } from "./model-registry.mjs";
 import {
@@ -64,6 +65,14 @@ const SIGN_IN_CLIS = Object.freeze({
     // stdio pair kills it before it opens the browser.
     needsTerminal: true,
   },
+  // Command Code's OAuth sign-in is the official CLI's own browser flow; the
+  // tray surfaces a one-line hint instead of an npm install it cannot perform.
+  commandcode: {
+    executable: "command-code",
+    loginArgs: ["login"],
+    candidates: [path.join(os.homedir(), ".local", "bin", "command-code")],
+    installCommand: "Command Code is installed by its own installer; install it before signing in.",
+  },
 });
 
 function commandPath(name) {
@@ -97,6 +106,9 @@ function oauthConfigured(providerId) {
   if (providerId === "grok-oauth") return grokOAuthStatus().configured;
   if (providerId === "antigravity-oauth") return antigravityOAuthStatus().configured;
   if (providerId === "devin-cli") return devinCliStatus().configured;
+  if (providerId === "commandcode") return commandCodeOAuthStatus().configured;
+  if (providerId === "commandcode-oauth") return commandCodeOAuthStatus().configured;
+  if (providerId === "commandcode-oauth-messages") return commandCodeOAuthStatus().configured;
   return false;
 }
 
@@ -108,6 +120,34 @@ export function providerOnboardingSnapshot() {
   return {
     providers: selectable.map((provider) => {
       const catalogSources = providerCatalogSources(provider.id);
+      // Command Code's OAuth provider is an openai-compatible endpoint that
+      // authenticates with the sign-in the official CLI already performed.
+      // The tray must offer that browser login (and never an "Add API key"
+      // card), so selectable providers that carry a CLI session render through
+      // the OAuth path even though their `kind` stays openai-compatible.
+      if (provider.credential?.cliSession === true) {
+        const cliId = provider.id.startsWith("commandcode") ? "commandcode" : provider.id;
+        const cliPath = oauthCliPath(cliId);
+        const cliInstalled = Boolean(cliPath);
+        const configured = oauthConfigured(provider.id);
+        return {
+          id: provider.id,
+          displayName: provider.displayName,
+          kind: "oauth",
+          credentialLabel: "OAuth session",
+          configured,
+          cliInstalled,
+          cliRunnable: cliInstalled,
+          reauth: configured ? true : false,
+          action: !cliInstalled
+            ? "install"
+            : configured
+              ? "ready"
+              : "login",
+          ...(catalogSources.length ? { catalogSources } : {}),
+          ...(provider.planNote ? { planNote: provider.planNote } : {}),
+        };
+      }
       if (provider.kind === "oauth") {
         // Antigravity has no vendor CLI to install or reuse: its sign-in is
         // this router's own browser OAuth flow.
