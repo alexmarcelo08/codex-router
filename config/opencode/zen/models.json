@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "opencode-zen/deepseek-v4-flash",
+      "gatewayModel": "opencode-zen-deepseek-v4-flash",
+      "compHash": "opencode-zen-deepseek-v4-flash-user-v1",
+      "upstreamModel": "deepseek-v4-flash",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "deepseek-v4-flash \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 100,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/deepseek-v4-flash-free",
+      "gatewayModel": "opencode-zen-deepseek-v4-flash-free",
+      "compHash": "opencode-zen-deepseek-v4-flash-free-user-v1",
+      "upstreamModel": "deepseek-v4-flash-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "deepseek-v4-flash-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 101,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/laguna-s-2.1-free",
+      "gatewayModel": "opencode-zen-laguna-s-2-1-free",
+      "compHash": "opencode-zen-laguna-s-2-1-free-user-v1",
+      "upstreamModel": "laguna-s-2.1-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "laguna-s-2.1-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 102,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/ling-3.0-flash-fin-free",
+      "gatewayModel": "opencode-zen-ling-3-0-flash-fin-free",
+      "compHash": "opencode-zen-ling-3-0-flash-fin-free-user-v1",
+      "upstreamModel": "ling-3.0-flash-fin-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "ling-3.0-flash-fin-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 103,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/mimo-v2.5-free",
+      "gatewayModel": "opencode-zen-mimo-v2-5-free",
+      "compHash": "opencode-zen-mimo-v2-5-free-user-v1",
+      "upstreamModel": "mimo-v2.5-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "mimo-v2.5-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 104,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/muse-spark-1.2-contributor-free",
+      "gatewayModel": "opencode-zen-muse-spark-1-2-contributor-free",
+      "compHash": "opencode-zen-muse-spark-1-2-contributor-free-user-v1",
+      "upstreamModel": "muse-spark-1.2-contributor-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "muse-spark-1.2-contributor-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 105,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/nemotron-3-ultra-free",
+      "gatewayModel": "opencode-zen-nemotron-3-ultra-free",
+      "compHash": "opencode-zen-nemotron-3-ultra-free-user-v1",
+      "upstreamModel": "nemotron-3-ultra-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "nemotron-3-ultra-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 106,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    },
+    {
+      "slug": "opencode-zen/nemotron-3.5-lightning-free",
+      "gatewayModel": "opencode-zen-nemotron-3-5-lightning-free",
+      "compHash": "opencode-zen-nemotron-3-5-lightning-free-user-v1",
+      "upstreamModel": "nemotron-3.5-lightning-free",
+      "provider": "opencode-zen",
+      "listed": true,
+      "displayName": "nemotron-3.5-lightning-free \u00b7 ZEN",
+      "description": "User-curated opencode-zen model; conservative default metadata that can be edited in the user model file.",
+      "priority": 107,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Adaptive reasoning"
+        }
+      ],
+      "contextWindow": 131072,
+      "autoCompact": 110000,
+      "inputModalities": [
+        "text"
+      ]
+    }
+  ]
+}

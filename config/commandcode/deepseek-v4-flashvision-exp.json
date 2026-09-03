@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "commandcode/deepseek/deepseek-v4-flash-vision-exp",
+      "gatewayModel": "commandcode-deepseek-deepseek-v4-flash-vision-exp",
+      "compHash": "commandcode-deepseek-deepseek-v4-flash-vision-exp-user-v1",
+      "upstreamModel": "deepseek/deepseek-v4-flash-vision-exp",
+      "provider": "commandcode",
+      "listed": true,
+      "displayName": "DeepSeek V4 Flash Vision Exp \u00b7 CC",
+      "description": "DeepSeek V4 Flash Vision Exp through the Command Code CLI OAuth session (/alpha/generate). Works on the Go plan.",
+      "priority": 101,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 850000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "requestProfile": "kimi-k3"
+    }
+  ]
+}
