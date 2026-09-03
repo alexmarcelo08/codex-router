@@ -7,7 +7,7 @@
       "upstreamModel": "claude-sonnet-5",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Sonnet 5 (Command Code)",
+      "displayName": "Claude Sonnet 5 \u00b7 CC",
       "description": "Claude Sonnet 5 through the Command Code Provider API using the Messages API.",
       "priority": 131,
       "defaultEffort": "high",

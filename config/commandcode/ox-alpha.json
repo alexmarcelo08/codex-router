@@ -7,7 +7,7 @@
       "upstreamModel": "stealth/ox-alpha",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Ox Alpha (Command Code)",
+      "displayName": "Ox Alpha \u00b7 CC",
       "description": "Ox Alpha through the Command Code Provider API. Free during the stealth preview; the preview and its limits can end without notice.",
       "priority": 92,
       "defaultEffort": "max",

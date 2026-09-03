@@ -7,7 +7,7 @@
       "upstreamModel": "claude-fable-5",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Fable 5 (Command Code)",
+      "displayName": "Claude Fable 5 \u00b7 CC",
       "description": "Claude Fable 5 through the Command Code Provider API using the Messages API.",
       "priority": 133,
       "defaultEffort": "high",

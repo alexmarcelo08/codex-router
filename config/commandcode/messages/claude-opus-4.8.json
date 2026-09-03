@@ -7,7 +7,7 @@
       "upstreamModel": "claude-opus-4-8",
       "provider": "commandcode-messages",
       "listed": true,
-      "displayName": "Claude Opus 4.8 (Command Code)",
+      "displayName": "Claude Opus 4.8 \u00b7 CC",
       "description": "Claude Opus 4.8 through the Command Code Provider API using the Messages API.",
       "priority": 132,
       "defaultEffort": "high",

@@ -7,7 +7,7 @@
       "upstreamModel": "thinkingmachines/inkling",
       "provider": "commandcode",
       "listed": true,
-      "displayName": "Inkling (Command Code)",
+      "displayName": "Inkling \u00b7 CC",
       "description": "Inkling through the Command Code Provider API.",
       "priority": 127,
       "defaultEffort": "high",
