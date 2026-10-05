@@ -675,6 +675,7 @@ test("login-free control selects a ready external model and restores Codex defau
       [
         ["deepseek/deepseek-v4-flash", "hide"],
         ["deepseek/deepseek-v4-flash-vision-exp", "list"],
+        ["deepseek/deepseek-v4.1-flash", "list"],
         ["deepseek/deepseek-v4-pro", "list"],
       ],
     );

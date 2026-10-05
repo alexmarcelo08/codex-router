@@ -1293,6 +1293,7 @@ test(
       assert.deepEqual(picker.visible, [
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-flash-vision-exp",
+        "deepseek/deepseek-v4.1-flash",
       ]);
     } finally {
       rmSync(codexHome, { recursive: true, force: true });

@@ -33,6 +33,38 @@
       "compHash": "commandcode-api-deepseek-v4-flash-v1"
     },
     {
+      "slug": "commandcode-api/deepseek-v4.1-flash",
+      "gatewayModel": "commandcode-api-deepseek-v4-1-flash",
+      "upstreamModel": "deepseek/deepseek-v4.1-flash",
+      "provider": "commandcode-api",
+      "listed": true,
+      "displayName": "DeepSeek V4.1 Flash \u00b7 CC-API",
+      "description": "DeepSeek V4.1 Flash through the Command Code API.",
+      "priority": 100,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "requestProfile": "auto-tool-choice",
+      "compHash": "commandcode-api-deepseek-v4-1-flash-v1"
+    },
+    {
       "slug": "commandcode-api/deepseek-v4-pro",
       "gatewayModel": "commandcode-api-deepseek-v4-pro",
       "upstreamModel": "deepseek/deepseek-v4-pro",
