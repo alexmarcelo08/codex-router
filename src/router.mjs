@@ -1164,6 +1164,7 @@ async function relayEncryptedAgentPayload(request, item, encrypted, signal) {
       `Native collaboration payload relay failed with HTTP ${upstream.status}.`,
     );
     error.status = 502;
+    error.relayStatus = upstream.status;
     throw error;
   }
   if (bytes.length > 4 * 1024 * 1024) {
@@ -1192,6 +1193,11 @@ async function relayEncryptedAgentPayload(request, item, encrypted, signal) {
   return plaintext;
 }
 
+function nativeRelayTransientFailure(error) {
+  const status = Number(error?.relayStatus);
+  return status === 429 || (status >= 500 && status < 600);
+}
+
 async function normalizeRoutedAgentInput(request, input, signal) {
   const normalized = normalizeRoutedInput(input);
   if (!Array.isArray(normalized)) return normalized;
@@ -1202,9 +1208,21 @@ async function normalizeRoutedAgentInput(request, input, signal) {
       output.push(item);
       continue;
     }
-    const plaintext = payload.native
-      ? await relayEncryptedAgentPayload(request, item, payload.content, signal)
-      : payload.content;
+    let plaintext = payload.content;
+    if (payload.native) {
+      try {
+        plaintext = await relayEncryptedAgentPayload(request, item, payload.content, signal);
+      } catch (error) {
+        if (!nativeRelayTransientFailure(error)) throw error;
+        if (!QUIET) {
+          console.error(
+            `[codex-router] collaboration payload relay unavailable (HTTP ${error.relayStatus}); inlining it as an unreadable note so the turn can continue`,
+          );
+        }
+        plaintext =
+          "[collaboration payload unavailable: the native relay was rate-limited and the delegated result could not be decoded]";
+      }
+    }
     output.push({
       ...item,
       content: [
