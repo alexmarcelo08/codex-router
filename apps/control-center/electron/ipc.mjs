@@ -815,6 +815,20 @@ export function registerIpcHandlers({
       throw new Error("Provider CLI sign-in must be run in your own terminal on Windows or Linux.");
     }
     const { id } = await validateProvider(providerId, "sign-in");
+    // The Claude sign-in is this router's own pasted-code flow and needs a
+    // real TTY, so it hands off to Terminal the same way the vendor CLIs do
+    // (and skips install-cli: there is no vendor binary to install).
+    if (id === "anthropic-oauth") {
+      const root = discoverSourceRoot();
+      // Clear any account-specific model list before handing off; a cancelled
+      // sign-in costs one later fetch, a retained list would be incorrect.
+      await runControl(["catalog-cache", "invalidate", id]);
+      return {
+        ...openTerminalCommand(path.join(root, "bin", "providers"), ["login", id], root),
+        providerId: id,
+        pending: true,
+      };
+    }
     await runControl(["install-cli", id], { timeoutMs: 120_000 });
     const login = OAUTH_LOGIN_COMMANDS[id];
     if (!login) throw new Error(`Interactive sign-in is not available for ${id}.`);

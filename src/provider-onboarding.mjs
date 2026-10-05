@@ -256,6 +256,9 @@ export function providerOnboardingSnapshot() {
 // Whatever node is running this file is by definition a working one, so put
 // its directory in front for the child.
 export function installOauthCli(providerId) {
+  // The Claude sign-in belongs to this router: there is no vendor CLI to
+  // install, so the install step is satisfied by doing nothing.
+  if (providerId === "anthropic-oauth") return;
   const cli = SIGN_IN_CLIS[providerId];
   if (!cli) throw new Error(`Unknown OAuth provider: ${providerId}`);
   if (providerId === "grok-oauth") {
