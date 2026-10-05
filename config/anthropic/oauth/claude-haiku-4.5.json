@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "anthropic-oauth/claude-haiku-4.5",
+      "gatewayModel": "anthropic-oauth-claude-haiku-4-5",
+      "upstreamModel": "claude-haiku-4-5-20251001",
+      "provider": "anthropic-oauth",
+      "listed": true,
+      "displayName": "Claude Haiku 4.5 (Pro/Max)",
+      "description": "Claude Haiku 4.5 through a Claude Pro/Max subscription sign-in.",
+      "priority": 13,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        }
+      ],
+      "contextWindow": 200000,
+      "autoCompact": 180000,
+      "inputModalities": [
+        "text"
+      ],
+      "compHash": "anthropic-oauth-claude-haiku-4-5-v1"
+    }
+  ]
+}

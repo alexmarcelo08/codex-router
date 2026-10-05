@@ -49,7 +49,7 @@ export const ANTHROPIC_OAUTH_SCOPES = Object.freeze([
 export function anthropicOAuthUserAgent() {
   return (
     process.env.ANTHROPIC_OAUTH_USER_AGENT ||
-    "claude-cli/2.0.0 (external, cli)"
+    "claude-cli/2.1.286 (external, cli)"
   ).trim();
 }
 
