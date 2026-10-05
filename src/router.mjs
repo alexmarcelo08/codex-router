@@ -1880,6 +1880,7 @@ async function summarizeWith(request, payload, route, aged, prepared, signal) {
   normalizeAutoToolChoice(body, route);
   delete body.previous_response_id;
   delete body.client_metadata;
+  delete body.access_programs;
   // Compaction re-enters the same provider as the routed turn; Fireworks
   // rejects this OpenAI search parameter at that boundary too.
   if (providerForModel(route)?.id === "fireworks") delete body.web_search_options;
@@ -2401,9 +2402,10 @@ async function buildRoutedRequest({ request, payload, route, agedInput, tokenMax
     routed.reasoning = { ...(routed.reasoning || {}), effort: childEffort };
   }
   normalizeAutoToolChoice(routed, route);
-  // Native OpenAI traffic keeps client_metadata; routed providers do not
-  // consume it and the strict ones reject the unknown field.
+  // Native OpenAI traffic keeps client_metadata and access_programs; routed
+  // providers do not consume them and the strict ones reject the unknown field.
   delete routed.client_metadata;
+  delete routed.access_programs;
   // Codex sends reasoning as an object. LiteLLM's Ollama path tests that value
   // for membership of a string set, which raises on a dict and fails the whole
   // turn -- 210 of them here before this was caught. Ollama has no

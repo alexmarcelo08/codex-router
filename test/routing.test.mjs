@@ -4811,6 +4811,7 @@ test("API forwarder strips web_search_options for Fireworks", async () => {
           model: curated.gatewayModel,
           web_search_options: { search_context_size: "medium" },
           client_metadata: { workspace: "caller-owned" },
+          access_programs: { cyber: "standard" },
           messages: [{ role: "user", content: "test" }],
         }),
       },
@@ -4819,6 +4820,7 @@ test("API forwarder strips web_search_options for Fireworks", async () => {
     assert.equal(upstreamRequests[0].model, "accounts/fireworks/models/test-model");
     assert.equal(upstreamRequests[0].web_search_options, undefined);
     assert.equal(upstreamRequests[0].client_metadata, undefined);
+    assert.equal(upstreamRequests[0].access_programs, undefined);
   } finally {
     await stopChild(forwarder);
     await closeServer(upstream.server);
