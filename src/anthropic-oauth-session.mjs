@@ -200,6 +200,7 @@ async function requestRefresh(
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
+          "anthropic-version": "2023-06-01",
           "User-Agent": anthropicOAuthUserAgent(),
         },
         body: JSON.stringify({

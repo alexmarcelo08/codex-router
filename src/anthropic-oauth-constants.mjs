@@ -15,14 +15,14 @@ export function anthropicOAuthClientId() {
 export function anthropicOAuthAuthorizationEndpoint() {
   return (
     process.env.ANTHROPIC_OAUTH_AUTHORIZATION_URL ||
-    "https://claude.ai/oauth/authorize"
+    "https://claude.com/cai/oauth/authorize"
   ).replace(/\/+$/, "");
 }
 
 export function anthropicOAuthTokenUrl() {
   return (
     process.env.ANTHROPIC_OAUTH_TOKEN_URL ||
-    "https://console.anthropic.com/v1/oauth/token"
+    "https://platform.claude.com/v1/oauth/token"
   ).replace(/\/+$/, "");
 }
 
@@ -32,16 +32,14 @@ export function anthropicOAuthTokenUrl() {
 export function anthropicOAuthRedirectUri() {
   return (
     process.env.ANTHROPIC_OAUTH_REDIRECT_URI ||
-    "https://console.anthropic.com/oauth/code/callback"
+    "https://platform.claude.com/oauth/code/callback"
   ).trim();
 }
 
 export const ANTHROPIC_OAUTH_SCOPES = Object.freeze([
-  "user:profile",
   "user:inference",
+  "user:profile",
   "user:sessions:claude_code",
-  "user:mcp_servers",
-  "user:file_upload",
 ]);
 
 // Anthropic authorizes an OAuth token only for the client that requested it,

@@ -25,7 +25,7 @@ test("generates an S256 PKCE pair", () => {
 
 test("builds the Claude authorization URL", () => {
   const url = new URL(anthropicOAuthAuthorizationUrl("verifier-value", "state-value"));
-  assert.equal(url.origin + url.pathname, "https://claude.ai/oauth/authorize");
+  assert.equal(url.origin + url.pathname, "https://claude.com/cai/oauth/authorize");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("code"), "true");
   assert.equal(url.searchParams.get("code_challenge_method"), "S256");
