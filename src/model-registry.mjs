@@ -300,6 +300,7 @@ function loadRegistry() {
         !provider.keyless &&
         !["anonymous", "per-model"].includes(provider.authMode) &&
         provider.credential?.cliSession !== true &&
+        provider.credential?.oauthSessionKind === undefined &&
         (!provider.credential?.file || !Array.isArray(provider.credential.environment))
       ) {
         fail(`provider ${provider.id} requires credential metadata`);
@@ -322,6 +323,21 @@ function loadRegistry() {
       }
       if (provider.credential?.cliSession === true && provider.commandCodeOAuth !== true) {
         fail(`provider ${provider.id} uses a CLI session but is not a Command Code OAuth provider`);
+      }
+      // A Claude OAuth provider authenticates with the session this router's
+      // own browser sign-in stored. Only the Anthropic Messages surface may
+      // use it, so the token can never be attached to another vendor's wire.
+      if (
+        provider.credential?.oauthSessionKind !== undefined &&
+        provider.credential.oauthSessionKind !== "anthropic"
+      ) {
+        fail(`provider ${provider.id} has an unsupported OAuth session kind`);
+      }
+      if (
+        provider.credential?.oauthSessionKind === "anthropic" &&
+        (provider.protocol !== "anthropic" || provider.ownedBy !== "anthropic")
+      ) {
+        fail(`provider ${provider.id} uses the Claude OAuth session outside the Anthropic Messages surface`);
       }
       // Some providers authenticate a credential their plan may still not
       // entitle to the API. The note says so everywhere a user connects, so

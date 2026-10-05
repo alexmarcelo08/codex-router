@@ -16,6 +16,8 @@ import {
 import { curatedModelBlockReason } from "./opencode-curation.mjs";
 import { providerCatalogRouteIds } from "./provider-catalogs.mjs";
 import { credentialStatus, resolveProviderCredential } from "./provider-credentials.mjs";
+import { ensureFreshAnthropicOAuthToken } from "./anthropic-oauth-session.mjs";
+import { ANTHROPIC_OAUTH_BETA, anthropicOAuthUserAgent } from "./anthropic-oauth-constants.mjs";
 import {
   ensureFreshGitHubCopilotSession,
   githubCopilotCatalogHeaders,
@@ -209,6 +211,13 @@ async function providerPayload(provider, identity) {
   let baseUrl = identity?.baseUrl || resolveProviderBaseUrl(provider).baseUrl;
   let headers = provider.authMode === "anonymous"
     ? {}
+    : provider.credential?.oauthSessionKind === "anthropic"
+    ? {
+        Authorization: `Bearer ${await ensureFreshAnthropicOAuthToken()}`,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": ANTHROPIC_OAUTH_BETA,
+        "User-Agent": anthropicOAuthUserAgent(),
+      }
     : provider.protocol === "anthropic"
     ? { "x-api-key": credential.value, "anthropic-version": "2023-06-01" }
     : { Authorization: `Bearer ${credential.value}` };

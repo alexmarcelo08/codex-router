@@ -17,6 +17,7 @@ import { LEGACY_STATE_DIRS, STATE_DIR, TARGET } from "./paths.mjs";
 import { targetCli } from "./target-integration.mjs";
 import { PROVIDERS } from "./model-registry.mjs";
 import { commandCodeOAuthCredential } from "./commandcode-oauth.mjs";
+import { anthropicOAuthCredential } from "./anthropic-oauth-session.mjs";
 import {
   assertGitHubCopilotCredential,
   githubCopilotCredentialProblem,
@@ -155,6 +156,17 @@ export function resolveProviderCredential(providerOrId, options = {}) {
       ? { value: credential.value, source: credential.source, persistent: true }
       : undefined;
   }
+  // A Claude OAuth provider authenticates with the token this router's own
+  // browser sign-in stored. Like the Command Code CLI session it is not an
+  // operator-supplied key, so it resolves on the same path every credential
+  // source does.
+  if (provider.credential?.oauthSessionKind === "anthropic") {
+    if (discoveryDisabled()) return undefined;
+    const credential = anthropicOAuthCredential();
+    return credential
+      ? { value: credential.value, source: credential.source, persistent: true }
+      : undefined;
+  }
   // Anonymous providers deliberately carry no secret. Returning a persistent
   // marker makes them participate in the same configured/selected/catalog
   // flow as local Ollama without ever creating a credential file or header.
@@ -218,6 +230,9 @@ export function credentialSetupHint(provider) {
   if (provider.credential?.cliSession === true) {
     return "Sign in with the Command Code CLI (`command-code login`) to create the OAuth session.";
   }
+  if (provider.credential?.oauthSessionKind === "anthropic") {
+    return `Run the Claude sign-in (${targetCli(`providers login ${provider.id}`)}) to create the OAuth session.`;
+  }
   const keyCommand = targetCli(`provider-key ${provider.id} set`);
   return `Run ${keyCommand}`;
 }
@@ -247,6 +262,12 @@ export function writeProviderCredential(providerOrId, value) {
     throw new Error(
       `${provider.id} uses a Command Code CLI OAuth session, not an API key. ` +
         "Sign in with the Command Code CLI to create or refresh it.",
+    );
+  }
+  if (provider.credential?.oauthSessionKind === "anthropic") {
+    throw new Error(
+      `${provider.id} signs in through the browser, not an API key. ` +
+        "Run the Claude sign-in to create or refresh the session.",
     );
   }
   const key = String(value || "").trim();

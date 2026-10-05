@@ -42,6 +42,8 @@ import {
   recordCommandCodeRoute,
 } from "./commandcode-plan.mjs";
 import { relayCommandCodeGenerate } from "./commandcode-relay.mjs";
+import { ensureFreshAnthropicOAuthToken } from "./anthropic-oauth-session.mjs";
+import { ANTHROPIC_OAUTH_BETA, anthropicOAuthUserAgent } from "./anthropic-oauth-constants.mjs";
 import { VERSION } from "./version.mjs";
 import { installStableFetchTransport } from "./fetch-transport.mjs";
 import { zaiCacheUsageTransform } from "./zai-cache-usage.mjs";
@@ -330,6 +332,10 @@ function requiresTrailingUserTurn(provider, model) {
 // answer to the same plan entitlement and the same fallback route.
 function isCommandCodeProvider(provider) {
   return provider?.ownedBy === "commandcode";
+}
+
+function isAnthropicOAuthProvider(provider) {
+  return provider?.credential?.oauthSessionKind === "anthropic";
 }
 
 // Gemini 3.x thinking models reject assistant tool calls whose reasoning
@@ -862,6 +868,25 @@ function normalizeBody(buffer, contentType, route) {
   return { body: Buffer.from(JSON.stringify(payload), "utf8"), model, provider, endpoint, payload };
 }
 
+// LiteLLM may forward its own anthropic-beta features; keep them and add the
+// OAuth gate rather than replacing the set.
+function withAnthropicOAuthBeta(headers) {
+  const existing = Object.keys(headers).find(
+    (name) => name.toLowerCase() === "anthropic-beta",
+  );
+  const values = new Set(
+    existing
+      ? String(headers[existing])
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [],
+  );
+  values.add(ANTHROPIC_OAUTH_BETA);
+  if (existing) delete headers[existing];
+  return [...values].join(",");
+}
+
 function upstreamHeaders(requestHeaders, body, apiKey, provider, extraHeaders = {}, endpoint = provider) {
   const headers = {};
   const providerIdentityHeaders = new Set([
@@ -890,6 +915,12 @@ function upstreamHeaders(requestHeaders, body, apiKey, provider, extraHeaders = 
     // The upstream explicitly permits anonymous access -- for a reseller's
     // free-model subset, or for a single allowlisted community endpoint.
     // Never forward the gateway's internal bearer token to either.
+  } else if (isAnthropicOAuthProvider(provider)) {
+    // An OAuth token rides the Authorization header behind a beta gate; an
+    // x-api-key would be rejected outright.
+    headers.Authorization = `Bearer ${apiKey}`;
+    headers["anthropic-version"] ||= "2023-06-01";
+    headers["anthropic-beta"] = withAnthropicOAuthBeta(headers);
   } else if (provider.protocol === "anthropic") {
     headers["x-api-key"] = apiKey;
     headers["anthropic-version"] ||= "2023-06-01";
@@ -906,6 +937,16 @@ function upstreamHeaders(requestHeaders, body, apiKey, provider, extraHeaders = 
 }
 
 async function upstreamSession(provider, credential, payload, options = {}, endpoint = provider) {
+  if (isAnthropicOAuthProvider(provider)) {
+    // Refresh ahead of the request; a token that still fails upstream is
+    // replayed once with a forced refresh in handleRequest.
+    const token = await ensureFreshAnthropicOAuthToken({ force: options.force === true });
+    return {
+      apiKey: token,
+      baseUrl: providerBaseUrl(endpoint),
+      headers: { "User-Agent": anthropicOAuthUserAgent() },
+    };
+  }
   if (provider.authProfile !== "github-copilot") {
     return { apiKey: credential.value, baseUrl: providerBaseUrl(endpoint), headers: {} };
   }
@@ -1078,9 +1119,11 @@ async function handleRequest(request, response) {
   // Fetch may detach a Buffer's backing ArrayBuffer while sending it. Copilot
   // can replay once after refreshing account routing, so use one immutable
   // string for both attempts instead of trying to reuse detached bytes.
-  const upstreamBody = normalized.provider.authProfile === "github-copilot"
-    ? normalized.body.toString("utf8")
-    : normalized.body;
+  const upstreamBody =
+    normalized.provider.authProfile === "github-copilot" ||
+    isAnthropicOAuthProvider(normalized.provider)
+      ? normalized.body.toString("utf8")
+      : normalized.body;
   let session = await upstreamSession(
     normalized.provider,
     credential,
@@ -1105,6 +1148,33 @@ async function handleRequest(request, response) {
   // Account routing can change with plan or policy. Re-resolve and replay once
   // before any response byte reaches the caller; every other status is relayed.
   if (normalized.provider.authProfile === "github-copilot" && upstream.status === 401) {
+    await upstream.body?.cancel().catch(() => undefined);
+    session = await upstreamSession(
+      normalized.provider,
+      credential,
+      normalized.payload,
+      { force: true },
+      normalized.endpoint,
+    );
+    target = `${session.baseUrl}${route}${requestUrl.search}`;
+    upstream = await fetch(target, {
+      method: request.method,
+      headers: upstreamHeaders(
+        request.headers,
+        upstreamBody,
+        session.apiKey,
+        normalized.provider,
+        session.headers,
+        normalized.endpoint,
+      ),
+      body: upstreamBody,
+      signal: controller.signal,
+    });
+  }
+  // A rejected Claude OAuth token is usually just expired: re-resolving forces
+  // a refresh, and the replay costs one extra request at most before any byte
+  // reaches the caller.
+  if (isAnthropicOAuthProvider(normalized.provider) && upstream.status === 401) {
     await upstream.body?.cancel().catch(() => undefined);
     session = await upstreamSession(
       normalized.provider,

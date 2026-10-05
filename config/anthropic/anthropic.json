@@ -20,6 +20,20 @@
         ],
         "prompt": "Anthropic API key"
       }
+    },
+    {
+      "id": "anthropic-oauth",
+      "displayName": "Claude (Pro/Max OAuth)",
+      "kind": "openai-compatible",
+      "protocol": "anthropic",
+      "ownedBy": "anthropic",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "baseUrlEnv": "ANTHROPIC_API_BASE_URL",
+      "planNote": "Bills against a Claude Pro/Max subscription through this router's browser sign-in, not the separately billed API. Model availability follows the account's plan.",
+      "credential": {
+        "oauthSessionKind": "anthropic",
+        "label": "Claude OAuth session"
+      }
     }
   ]
 }

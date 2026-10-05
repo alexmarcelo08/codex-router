@@ -86,12 +86,13 @@ async function main() {
   // canonical provider the user actually changed.
   const provider = PROVIDERS.get(canonicalProviderId(providerId ?? ""));
   if (command === "login") {
-    if (provider?.id !== "antigravity-oauth") {
-      throw new Error("Usage: providers login antigravity-oauth");
+    if (!["antigravity-oauth", "anthropic-oauth"].includes(provider?.id)) {
+      throw new Error("Usage: providers login antigravity-oauth|anthropic-oauth");
     }
-    // Antigravity is the one OAuth provider whose browser flow belongs to the
-    // router. Kimi and Grok retain their official CLI sessions, which need a
-    // real terminal instead of a child with piped stdio.
+    // Antigravity and Claude are the OAuth providers whose browser flows
+    // belong to the router. Kimi, Grok, and Devin retain their official CLI
+    // sessions, which need a real terminal instead of a child with piped
+    // stdio.
     await loginOauthProvider(provider.id);
     if (readProviderSelection().includes(provider.id)) {
       process.stdout.write(`${provider.displayName} sign-in completed; the provider remains enabled.\n`);
@@ -100,13 +101,15 @@ async function main() {
         `${provider.displayName} sign-in completed. Run \`${providersCommand("enable", provider.id)}\` to add its models without changing any other provider.\n`,
       );
     }
-    // The forwarder that serves these models is spawned only when a session
-    // exists, so a router that started before this sign-in has none. Say so
-    // here rather than leaving the first routed turn to fail on a port nothing
-    // is listening on.
-    process.stdout.write(
-      `The Antigravity forwarder starts with the router service; run \`${targetCli("control service restart")}\` so it picks up this session.\n`,
-    );
+    if (provider.id === "antigravity-oauth") {
+      // The forwarder that serves these models is spawned only when a session
+      // exists, so a router that started before this sign-in has none. Say so
+      // here rather than leaving the first routed turn to fail on a port
+      // nothing is listening on.
+      process.stdout.write(
+        `The Antigravity forwarder starts with the router service; run \`${targetCli("control service restart")}\` so it picks up this session.\n`,
+      );
+    }
     return;
   }
   if (!provider || !["enable", "disable"].includes(command)) {
@@ -114,9 +117,12 @@ async function main() {
   }
   if (command === "enable" && !configured(provider)) {
     const keySetup = `run \`${targetCli(`provider-key ${provider.id} set`)}\``;
-    const setup = provider.kind === "oauth"
-      ? SIGN_IN_STATUS[provider.id]?.setup || "sign in with the provider CLI"
-      : keySetup;
+    const setup =
+      provider.kind === "oauth"
+        ? SIGN_IN_STATUS[provider.id]?.setup || "sign in with the provider CLI"
+        : provider.credential?.oauthSessionKind === "anthropic"
+          ? `run \`${providersCommand("login", provider.id)}\``
+          : keySetup;
     throw new Error(`${provider.displayName} is not configured; ${setup} first.`);
   }
   let providers;

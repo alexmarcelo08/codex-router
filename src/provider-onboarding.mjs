@@ -12,6 +12,7 @@ import { devinCliStatus } from "./devin-cli-status.mjs";
 import { grokOAuthStatus } from "./grok-oauth-status.mjs";
 import { antigravityOAuthStatus } from "./antigravity-oauth-status.mjs";
 import { removeAntigravityToken } from "./antigravity-oauth-session.mjs";
+import { anthropicOAuthStatus, removeAnthropicOAuthToken } from "./anthropic-oauth-session.mjs";
 import { commandCodeOAuthStatus } from "./commandcode-oauth.mjs";
 import { KIMI_CLI_NPM_PACKAGE } from "./kimi-oauth-onboarding.mjs";
 import { MODELS, PROVIDERS, providerNeedsNoKey } from "./model-registry.mjs";
@@ -99,6 +100,7 @@ export function oauthLoginArgs(providerId) {
 }
 
 function oauthConfigured(providerId) {
+  if (providerId === "anthropic-oauth") return anthropicOAuthStatus().configured;
   if (providerId === "kimi-oauth") return kimiOAuthStatus().configured;
   if (providerId === "grok-oauth") return grokOAuthStatus().configured;
   if (providerId === "antigravity-oauth") return antigravityOAuthStatus().configured;
@@ -140,6 +142,26 @@ export function providerOnboardingSnapshot() {
             : configured
               ? "ready"
               : "login",
+          ...(catalogSources.length ? { catalogSources } : {}),
+          ...(provider.planNote ? { planNote: provider.planNote } : {}),
+        };
+      }
+      if (provider.credential?.oauthSessionKind === "anthropic") {
+        // The Claude sign-in belongs to this router, so the card renders like
+        // Antigravity's: no vendor CLI to install, a browser login to run.
+        const status = anthropicOAuthStatus();
+        return {
+          id: provider.id,
+          displayName: provider.displayName,
+          kind: "oauth",
+          credentialLabel: "OAuth session",
+          configured: status.configured,
+          // A rejected or damaged session is not configured, but its
+          // router-managed file must remain removable from every UI.
+          disconnectable: status.credentialPresent,
+          cliInstalled: true,
+          cliRunnable: true,
+          action: status.configured ? "ready" : "login",
           ...(catalogSources.length ? { catalogSources } : {}),
           ...(provider.planNote ? { planNote: provider.planNote } : {}),
         };
@@ -272,6 +294,17 @@ export function installOauthCli(providerId) {
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
 export async function loginOauthProvider(providerId) {
+  if (providerId === "anthropic-oauth") {
+    // Imported lazily: this module is read on the setup and status paths
+    // before the package's Node dependencies are installed, and the sign-in
+    // flow pulls the fetch transport (and undici) with it.
+    const { signInAnthropic } = await import("./anthropic-oauth-onboarding.mjs");
+    await signInAnthropic();
+    if (!oauthConfigured(providerId)) {
+      throw new Error("Sign-in finished without a usable Claude OAuth session. Please try again.");
+    }
+    return;
+  }
   if (providerId === "antigravity-oauth") {
     const { signInAntigravity } = await import("./antigravity-oauth-onboarding.mjs");
     await signInAntigravity();
@@ -328,6 +361,21 @@ export function saveApiCredential(providerId, value) {
 // macOS Keychain or the environment, so report what still resolves afterwards
 // instead of claiming the credential itself is gone.
 export async function removeApiCredential(providerId) {
+  if (providerId === "anthropic-oauth") {
+    const provider = PROVIDERS.get(providerId);
+    const removedFiles = removeAnthropicOAuthToken() ? 1 : 0;
+    // Disconnect is also a routing decision. Withdraw the provider even when
+    // the credential vanished between the snapshot and this action.
+    disableProvider(providerId);
+    const remaining = anthropicOAuthStatus();
+    return {
+      provider: providerId,
+      displayName: provider?.displayName || "Claude (Pro/Max OAuth)",
+      removedFiles,
+      stillConfigured: remaining.configured === true,
+      remainingSource: remaining.configured ? remaining.source : undefined,
+    };
+  }
   if (providerId === "antigravity-oauth") {
     const provider = PROVIDERS.get(providerId);
     const removedFiles = (await removeAntigravityToken()) ? 1 : 0;

@@ -185,7 +185,8 @@ test("the discovery workflow keeps live secrets away from pull-request code", ()
       providerCatalogKind(provider) !== "models-endpoint" ||
       provider.authMode === "anonymous" ||
       provider.keyless ||
-      provider.credential?.cliSession === true
+      provider.credential?.cliSession === true ||
+      provider.credential?.oauthSessionKind !== undefined
     ) continue;
     const names = provider.credential?.environment || [];
     assert.ok(

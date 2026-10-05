@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "anthropic-oauth/claude-sonnet-5",
+      "gatewayModel": "anthropic-oauth-claude-sonnet-5",
+      "upstreamModel": "claude-sonnet-5",
+      "provider": "anthropic-oauth",
+      "listed": true,
+      "displayName": "Claude Sonnet 5 (Pro/Max)",
+      "description": "Claude Sonnet 5 through a Claude Pro/Max subscription sign-in.",
+      "priority": 12,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Faster reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning"
+        },
+        {
+          "effort": "high",
+          "description": "Deep reasoning"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended reasoning"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text"
+      ],
+      "requestProfile": "anthropic-reasoning",
+      "compHash": "anthropic-oauth-claude-sonnet-5-v1"
+    }
+  ]
+}

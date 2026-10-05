@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "slug": "anthropic-oauth/claude-opus-5.5",
+      "gatewayModel": "anthropic-oauth-claude-opus-5-5",
+      "upstreamModel": "claude-opus-5-5",
+      "provider": "anthropic-oauth",
+      "listed": true,
+      "displayName": "Claude Opus 5.5 (Pro/Max)",
+      "description": "Claude Opus 5.5 through a Claude Pro/Max subscription sign-in.",
+      "priority": 8,
+      "defaultEffort": "high",
+      "reasoningLevels": [
+        {
+          "effort": "low",
+          "description": "Minimal thinking, fastest responses"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced adaptive thinking"
+        },
+        {
+          "effort": "high",
+          "description": "Adaptive deep reasoning for agentic work"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extended thinking, recommended for coding"
+        },
+        {
+          "effort": "max",
+          "description": "Unconstrained thinking on every response"
+        }
+      ],
+      "contextWindow": 1000000,
+      "autoCompact": 900000,
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "requestProfile": "anthropic-reasoning",
+      "supportsImageDetailOriginal": true,
+      "compHash": "anthropic-oauth-claude-opus-5-5-v1"
+    }
+  ]
+}
